@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>企业云盘 - Cloud Drive</title>
+  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.1/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; color: #fff; }
+    .hero { text-align: center; padding: 100px 20px 60px; }
+    .hero .icon { font-size: 80px; margin-bottom: 20px; opacity: .9; }
+    .hero h1 { font-size: 42px; font-weight: 800; margin-bottom: 12px; }
+    .hero p { font-size: 18px; opacity: .8; max-width: 480px; margin: 0 auto 32px; }
+    .features { max-width: 1000px; margin: 0 auto; padding: 0 20px 60px; }
+    .feature-card { background: rgba(255,255,255,.1); backdrop-filter: blur(10px); border-radius: 16px; padding: 28px; text-align: center; height: 100%; border: 1px solid rgba(255,255,255,.15); }
+    .feature-card i { font-size: 36px; margin-bottom: 16px; }
+    .feature-card h4 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+    .feature-card p { font-size: 13px; opacity: .7; }
+    .actions { text-align: center; padding-bottom: 60px; }
+    .actions .btn { margin: 0 8px; padding: 12px 32px; border-radius: 8px; font-weight: 600; }
+    footer { text-align: center; padding: 20px; font-size: 13px; opacity: .5; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <div class="icon"><i class="fas fa-cloud-upload-alt"></i></div>
+    <h1>企业云盘</h1>
+    <p>安全高效的企业文件管理与协作平台<br>Cloud Drive Management System</p>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+      <a href="/login.html" class="btn btn-lg btn-primary px-5"><i class="fas fa-sign-in-alt me-2"></i>登录系统</a>
+      <a href="/login.html" class="btn btn-lg btn-outline-light px-4" onclick="event.preventDefault();document.querySelector('[data-tab]').click();localStorage.setItem('redirectToRegister','1');window.location='/login.html'">
+        <i class="fas fa-user-plus me-2"></i>注册账号
+      </a>
+    </div>
+  </div>
+
+  <div class="features">
+    <div class="row g-4">
+      <div class="col-md-4">
+        <div class="feature-card">
+          <i class="fas fa-cloud-upload-alt"></i>
+          <h4>文件秒传</h4>
+          <p>基于文件哈希的秒传技术，相同文件无需重复上传，节省时间和带宽</p>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="feature-card">
+          <i class="fas fa-users"></i>
+          <h4>群组协作</h4>
+          <p>创建群组共享文件，成员管理、权限控制，团队协作更高效</p>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="feature-card">
+          <i class="fas fa-edit"></i>
+          <h4>在线编辑</h4>
+          <p>支持文本文件在线编辑，版本管理，修改记录可追溯</p>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="feature-card">
+          <i class="fas fa-shield-alt"></i>
+          <h4>数据安全</h4>
+          <p>密码加密传输存储，文件权限控制，操作日志审计，保障数据安全</p>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="feature-card">
+          <i class="fas fa-share-alt"></i>
+          <h4>文件分享</h4>
+          <p>生成分享链接，支持密码保护、有效期设置、权限控制</p>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="feature-card">
+          <i class="fas fa-chart-bar"></i>
+          <h4>存储统计</h4>
+          <p>实时查看存储使用情况，按文件类型分类统计，空间管理一目了然</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <p>企业云盘管理系统 v1.0.0 &copy; 2024 Cloud Drive Management System</p>
+  </footer>
+
+  <script>
+    if (localStorage.getItem('token')) { window.location.href = '/dashboard.html'; }
+  </script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>在线编辑 - 企业云盘</title>
+  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.1/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="editor-container">
+    <!-- Editor Toolbar -->
+    <div class="editor-toolbar">
+      <div>
+        <button class="btn btn-sm btn-outline me-2" onclick="history.back()">
+          <i class="fas fa-arrow-left me-1"></i>返回
+        </button>
+        <span id="editorFileName" class="fw-bold">加载中...</span>
+        <span id="editorFileInfo" class="text-muted ms-2" style="font-size:13px;"></span>
+      </div>
+      <div>
+        <button class="btn btn-outline btn-sm me-2" onclick="saveFile()" id="saveBtn">
+          <i class="fas fa-save me-1"></i>保存
+        </button>
+        <button class="btn btn-outline btn-sm" onclick="downloadFile()">
+          <i class="fas fa-download me-1"></i>下载
+        </button>
+      </div>
+    </div>
+
+    <!-- Editor Content -->
+    <div class="editor-content">
+      <textarea id="editorArea" spellcheck="false"></textarea>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="editor-statusbar">
+      <span id="statusInfo">就绪</span>
+      <span id="statusMeta"></span>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    if (!Auth.check()) {}
+
+    // Get file ID from URL
+    const params = new URLSearchParams(window.location.search);
+    const fileId = params.get('id');
+    if (!fileId) {
+      document.getElementById('editorFileName').textContent = '未指定文件';
+      document.getElementById('editorArea').disabled = true;
+      document.getElementById('saveBtn').disabled = true;
+    } else {
+      loadFile(fileId);
+    }
+
+    let currentFile = null;
+    let hasChanges = false;
+    let saveTimeout = null;
+
+    async function loadFile(id) {
+      const result = await API.previewFile(id);
+      if (result.code !== 200 || result.data.type !== 'text') {
+        document.getElementById('editorFileName').textContent = result.message || '无法加载文件';
+        document.getElementById('editorArea').disabled = true;
+        document.getElementById('saveBtn').disabled = true;
+        return;
+      }
+
+      currentFile = result.data;
+      document.getElementById('editorFileName').textContent = currentFile.name;
+      document.getElementById('editorFileInfo').textContent = `${formatSize(currentFile.size)} · .${currentFile.extension}`;
+      document.getElementById('editorArea').value = currentFile.content;
+      document.getElementById('statusMeta').textContent = `${countLines(currentFile.content)} 行 · .${currentFile.extension}`;
+
+      // Listen for changes
+      document.getElementById('editorArea').addEventListener('input', () => {
+        hasChanges = true;
+        document.getElementById('statusInfo').textContent = '📝 未保存的更改';
+        document.getElementById('saveBtn').className = 'btn btn-primary btn-sm';
+        // Auto-save after 3 seconds of no typing
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(autoSave, 3000);
+      });
+
+      // Keyboard shortcut: Ctrl+S
+      document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+          e.preventDefault();
+          saveFile();
+        }
+      });
+
+      document.getElementById('statusInfo').textContent = '就绪';
+    }
+
+    async function saveFile() {
+      if (!currentFile || !hasChanges) return;
+      const btn = document.getElementById('saveBtn');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>保存中...';
+
+      const content = document.getElementById('editorArea').value;
+      const result = await API.saveFile(fileId, content);
+
+      btn.disabled = false;
+      if (result.code === 200) {
+        hasChanges = false;
+        document.getElementById('statusInfo').textContent = '✅ 已保存 (v' + (result.data.version || '?') + ')';
+        document.getElementById('saveBtn').className = 'btn btn-outline btn-sm';
+        document.getElementById('statusMeta').textContent =
+          `${countLines(content)} 行 · ${formatSize(result.data.size)} · v${result.data.version}`;
+      } else {
+        document.getElementById('statusInfo').textContent = '❌ 保存失败: ' + (result.message || '错误');
+        btn.innerHTML = originalText;
+      }
+    }
+
+    function autoSave() {
+      if (hasChanges) saveFile();
+    }
+
+    function downloadFile() {
+      if (fileId) API.downloadFile(fileId);
+    }
+
+    function countLines(text) {
+      return text.split('\n').length;
+    }
+
+    // Warn before leaving with unsaved changes
+    window.addEventListener('beforeunload', (e) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+  </script>
+</body>
+</html>

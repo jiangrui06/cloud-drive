@@ -1,0 +1,21 @@
+{
+  "name": "cloud-drive",
+  "version": "1.0.0",
+  "description": "企业级网盘管理系统 - 支持多方式登录、用户与群组管理、文件秒传、在线编辑",
+  "private": true,
+  "scripts": {
+    "start": "node server/app.js",
+    "dev": "node server/app.js",
+    "init-db": "node server/models/init.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "mysql2": "^3.6.5",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "cors": "^2.8.5",
+    "morgan": "^1.10.0",
+    "uuid": "^9.0.0"
+  }
+}

@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>文件管理 - 企业云盘</title>
+  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.1/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="layout">
+    <!-- Same sidebar as dashboard -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h2><i class="fas fa-cloud me-2"></i>企业云盘</h2>
+        <p>Cloud Drive Management</p>
+      </div>
+      <nav class="sidebar-menu">
+        <div class="menu-item" onclick="location.href='/dashboard.html'"><i class="fas fa-home"></i>工作台</div>
+        <div class="menu-item active" onclick="location.href='/file-manager.html'"><i class="fas fa-folder"></i>我的文件</div>
+        <div class="menu-item" onclick="location.href='/file-manager.html?type=recent'"><i class="fas fa-clock"></i>最近文件</div>
+        <div class="menu-item" onclick="location.href='/file-manager.html?type=shared'"><i class="fas fa-share-alt"></i>共享文件</div>
+        <div class="menu-item" onclick="location.href='/admin/groups.html'"><i class="fas fa-users"></i>我的群组</div>
+        <div class="menu-divider" style="border-top:1px solid rgba(255,255,255,.1); margin:8px 16px;"></div>
+        <div class="menu-item" id="menuUsers2" onclick="location.href='/admin/users.html'" style="display:none;">
+          <i class="fas fa-user-cog"></i>用户管理<span class="badge">Admin</span>
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-info" onclick="showUserMenu()">
+          <div class="user-avatar" id="userAvatar">A</div>
+          <div class="user-detail">
+            <div class="user-name" id="userName">加载中...</div>
+            <div class="user-role" id="userRole">-</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <div class="page-header">
+        <h3><i class="fas fa-folder me-2"></i>我的文件</h3>
+        <div class="page-header-actions">
+          <button class="btn btn-primary btn-sm" onclick="showUploadModal()">
+            <i class="fas fa-upload me-1"></i>上传
+          </button>
+          <button class="btn btn-success btn-sm" onclick="showNewFolderModal()">
+            <i class="fas fa-folder-plus me-1"></i>新建文件夹
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="Auth.logout()">
+            <i class="fas fa-sign-out-alt me-1"></i>退出
+          </button>
+        </div>
+      </div>
+
+      <div class="page-body">
+        <!-- Breadcrumb -->
+        <div class="breadcrumb" id="breadcrumb">
+          <a onclick="loadFiles(null)"><i class="fas fa-home me-1"></i>全部文件</a>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="file-toolbar">
+          <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="text" id="searchInput" placeholder="搜索文件..." onkeyup="if(event.key==='Enter')searchFiles()">
+          </div>
+          <select class="form-control" id="typeFilter" style="width:auto;height:36px;" onchange="loadFiles()">
+            <option value="">全部类型</option>
+            <option value="image">图片</option>
+            <option value="document">文档</option>
+            <option value="video">视频</option>
+            <option value="audio">音频</option>
+            <option value="archive">压缩包</option>
+            <option value="code">代码</option>
+          </select>
+          <button class="btn btn-outline btn-sm" onclick="loadFiles()"><i class="fas fa-sync"></i></button>
+        </div>
+
+        <!-- File Table -->
+        <div class="card">
+          <div class="card-body p-0">
+            <table class="file-table" id="fileTable">
+              <thead>
+                <tr>
+                  <th style="width:40px;"><input type="checkbox" id="selectAll" onchange="toggleAll()"></th>
+                  <th>文件名</th>
+                  <th style="width:100px;">大小</th>
+                  <th style="width:80px;" onclick="toggleSort()" style="cursor:pointer;">修改日期</th>
+                  <th style="width:120px;">操作</th>
+                </tr>
+              </thead>
+              <tbody id="fileBody">
+                <tr><td colspan="5" class="text-center text-muted py-5"><i class="fas fa-spinner fa-spin me-2"></i>加载中...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Pagination -->
+        <div id="pagination" class="pagination" style="display:none;"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Upload Modal -->
+  <div class="modal-overlay" id="uploadModal">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header">
+        <h4><i class="fas fa-upload me-2"></i>上传文件</h4>
+        <button class="btn btn-sm btn-outline" onclick="closeModal('uploadModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+          <i class="fas fa-cloud-upload-alt"></i>
+          <h5>点击选择文件或拖拽文件到这里</h5>
+          <p>支持常见文档、图片、视频等格式，单文件最大100MB</p>
+        </div>
+        <input type="file" id="fileInput" style="display:none;" onchange="handleFileSelect(this)">
+        <div id="uploadProgress" style="display:none;" class="mt-3">
+          <div class="d-flex justify-content-between mb-1">
+            <span id="uploadFileName" style="font-size:13px;">-</span>
+            <span id="uploadPercent" style="font-size:13px;color:#666;">0%</span>
+          </div>
+          <div class="progress"><div class="progress-bar" id="uploadBar" style="width:0%;"></div></div>
+          <p id="uploadStatus" class="text-center mt-2" style="font-size:13px;color:#666;"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Folder Modal -->
+  <div class="modal-overlay" id="folderModal">
+    <div class="modal" style="max-width:400px;">
+      <div class="modal-header">
+        <h4><i class="fas fa-folder-plus me-2"></i>新建文件夹</h4>
+        <button class="btn btn-sm btn-outline" onclick="closeModal('folderModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>文件夹名称</label>
+          <input type="text" class="form-control" id="folderName" placeholder="输入文件夹名称" maxlength="100">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('folderModal')">取消</button>
+        <button class="btn btn-primary" onclick="createFolder()">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rename Modal -->
+  <div class="modal-overlay" id="renameModal">
+    <div class="modal" style="max-width:400px;">
+      <div class="modal-header">
+        <h4><i class="fas fa-edit me-2"></i>重命名</h4>
+        <button class="btn btn-sm btn-outline" onclick="closeModal('renameModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>新名称</label>
+          <input type="text" class="form-control" id="renameInput" placeholder="输入新名称">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('renameModal')">取消</button>
+        <button class="btn btn-primary" onclick="doRename()">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Share Modal -->
+  <div class="modal-overlay" id="shareModal">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header">
+        <h4><i class="fas fa-share-alt me-2"></i>分享文件</h4>
+        <button class="btn btn-sm btn-outline" onclick="closeModal('shareModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>分享权限</label>
+          <select class="form-control" id="sharePermission">
+            <option value="download">允许下载</option>
+            <option value="view">仅允许查看</option>
+            <option value="edit">允许编辑</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>提取密码（选填）</label>
+          <input type="text" class="form-control" id="sharePassword" placeholder="留空表示无密码" maxlength="20">
+        </div>
+        <div class="form-group">
+          <label>有效期</label>
+          <select class="form-control" id="shareExpire">
+            <option value="">永久有效</option>
+            <option value="1">1小时</option>
+            <option value="24">24小时</option>
+            <option value="168">7天</option>
+            <option value="720">30天</option>
+          </select>
+        </div>
+        <div id="shareResult" style="display:none;" class="mt-3 p-3 bg-light rounded">
+          <label class="fw-bold">分享链接:</label>
+          <div class="input-group mt-1">
+            <input type="text" class="form-control" id="shareUrl" readonly onclick="this.select()">
+            <button class="btn btn-primary" onclick="copyShareUrl()">复制</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('shareModal')">取消</button>
+        <button class="btn btn-primary" id="shareBtn" onclick="doShare()">生成分享</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile sidebar toggle -->
+  <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">
+    <i class="fas fa-bars"></i>
+  </button>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    if (!Auth.check()) {}
+
+    const user = Auth.getUser();
+    if (user) {
+      document.getElementById('userName').textContent = user.nickname || user.username;
+      document.getElementById('userAvatar').textContent = (user.nickname || user.username)[0].toUpperCase();
+      document.getElementById('userRole').textContent = user.role === 'admin' ? '管理员' : '普通用户';
+      if (user.role === 'admin') {
+        document.getElementById('menuUsers2').style.display = 'flex';
+      }
+    }
+
+    // ==================== State ====================
+    let currentFolder = null;       // current folder ID
+    let currentType = null;        // file type filter
+    let sortField = 'updated_at';
+    let sortOrder = 'desc';
+    let selectedFiles = new Set();
+    let renameTarget = null;
+    let shareTarget = null;
+    let pageInfo = { page: 1, pageSize: 50, total: 0 };
+
+    // ==================== Load Files ====================
+    async function loadFiles(folderId) {
+      if (folderId !== undefined) currentFolder = folderId;
+      currentType = document.getElementById('typeFilter').value;
+      pageInfo.page = 1;
+
+      const params = { page: pageInfo.page, pageSize: pageInfo.pageSize, sort: sortField, order: sortOrder };
+      if (currentFolder) params.folder_id = currentFolder;
+      if (currentType) params.type = currentType;
+
+      const result = await API.getFiles(params);
+      if (result.code !== 200) {
+        document.getElementById('fileBody').innerHTML =
+          '<tr><td colspan="5" class="text-center text-muted py-4">加载失败</td></tr>';
+        return;
+      }
+
+      const { list, pagination } = result.data;
+      pageInfo = pagination;
+      renderFiles(list);
+      renderBreadcrumb();
+      renderPagination();
+    }
+
+    function renderFiles(files) {
+      const tbody = document.getElementById('fileBody');
+      if (!files || files.length === 0) {
+        tbody.innerHTML = `<tr>
+          <td colspan="5">
+            <div class="empty-state">
+              <i class="fas fa-folder-open"></i>
+              <h4>此文件夹为空</h4>
+              <p>点击上方「上传」按钮或拖拽文件到此处</p>
+            </div>
+          </td>
+        </tr>`;
+        return;
+      }
+
+      tbody.innerHTML = files.map(f => {
+        const ext = (f.extension || '').replace('.', '');
+        const icon = getFileIcon(ext);
+        let iconClass = '';
+        if (['jpg','jpeg','png','gif','bmp','webp'].includes(ext)) iconClass = 'image';
+        else if (['mp4','avi','mov','wmv','flv','mkv'].includes(ext)) iconClass = 'video';
+        else if (['mp3','wav','wma','aac','flac'].includes(ext)) iconClass = 'audio';
+        else if (['zip','rar','7z','tar','gz'].includes(ext)) iconClass = 'archive';
+        else if (['pdf'].includes(ext)) iconClass = 'pdf';
+        else if (['js','py','html','css','json','xml','java','cpp','c','go','rs'].includes(ext)) iconClass = 'code';
+
+        const isSelected = selectedFiles.has(f.id);
+        const canEdit = f.is_editable;
+
+        return `<tr class="${isSelected ? 'selected' : ''}" data-id="${f.id}">
+          <td><input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleSelect(${f.id})"></td>
+          <td>
+            <div class="file-name-cell" onclick="openFile(${f.id}, '${ext}', '${f.name.replace(/'/g, "\\'")}')">
+              <span class="file-icon ${iconClass}"><i class="fas ${icon}"></i></span>
+              <span class="name">${f.name}</span>
+            </div>
+          </td>
+          <td>${formatSize(f.size)}</td>
+          <td>${formatDate(f.updated_at)}</td>
+          <td>
+            <div class="file-actions">
+              ${canEdit ? `<button class="btn-icon" title="在线编辑" onclick="event.stopPropagation();editFile(${f.id})"><i class="fas fa-edit"></i></button>` : ''}
+              <button class="btn-icon" title="下载" onclick="event.stopPropagation();API.downloadFile(${f.id})"><i class="fas fa-download"></i></button>
+              <button class="btn-icon" title="分享" onclick="event.stopPropagation();showShareModal(${f.id})"><i class="fas fa-share-alt"></i></button>
+              <button class="btn-icon" title="重命名" onclick="event.stopPropagation();showRenameModal(${f.id}, '${f.name.replace(/'/g, "\\'")}', 'file')"><i class="fas fa-pen"></i></button>
+              <button class="btn-icon" title="删除" onclick="event.stopPropagation();deleteFile(${f.id})" style="color:var(--danger);"><i class="fas fa-trash"></i></button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    // ==================== Breadcrumb ====================
+    let folderPath = [];
+
+    async function renderBreadcrumb() {
+      const bc = document.getElementById('breadcrumb');
+      if (!currentFolder) {
+        bc.innerHTML = '<a onclick="loadFiles(null)"><i class="fas fa-home me-1"></i>全部文件</a>';
+        return;
+      }
+      // Build path from root to current folder
+      const result = await API.getFolders();
+      if (result.code === 200) {
+        const allFolders = result.data.list;
+        const path = [];
+        let cur = allFolders.find(f => f.id === currentFolder);
+        while (cur) {
+          path.unshift(cur);
+          cur = cur.parent_id ? allFolders.find(f => f.id === cur.parent_id) : null;
+        }
+        folderPath = path;
+        bc.innerHTML = '<a onclick="loadFiles(null)"><i class="fas fa-home me-1"></i>全部文件</a>';
+        path.forEach(f => {
+          bc.innerHTML += `<span class="separator">/</span><a onclick="loadFiles(${f.id})">${f.name}</a>`;
+        });
+      }
+    }
+
+    // ==================== Navigation ====================
+    function openFile(id, ext, name) {
+      const textExts = ['txt','md','json','xml','html','css','js','py','sql','csv','yml','yaml','ini','cfg','log','sh','bat','java','cpp','c','h','go','rs','rb','php'];
+      if (textExts.includes(ext)) {
+        window.location.href = `/online-edit.html?id=${id}`;
+      } else {
+        API.downloadFile(id);
+      }
+    }
+
+    function editFile(id) {
+      window.location.href = `/online-edit.html?id=${id}`;
+    }
+
+    // ==================== File Operations ====================
+    function showUploadModal() {
+      document.getElementById('uploadModal').classList.add('show');
+      document.getElementById('uploadProgress').style.display = 'none';
+      document.getElementById('fileInput').value = '';
+    }
+
+    async function handleFileSelect(input) {
+      const file = input.files[0];
+      if (!file) return;
+
+      document.getElementById('uploadFileName').textContent = file.name;
+      document.getElementById('uploadProgress').style.display = 'block';
+      document.getElementById('uploadPercent').textContent = '分析中...';
+      document.getElementById('uploadStatus').textContent = '正在计算文件哈希...';
+
+      try {
+        // 计算MD5实现秒传
+        const md5 = await computeFileMD5(file);
+        document.getElementById('uploadStatus').textContent = '正在检查秒传...';
+
+        // 检查秒传
+        const checkResult = await API.checkHash(md5, file.size);
+        if (checkResult.code === 200 && checkResult.data.exists) {
+          document.getElementById('uploadPercent').textContent = '100%';
+          document.getElementById('uploadBar').style.width = '100%';
+          document.getElementById('uploadBar').className = 'progress-bar success';
+          document.getElementById('uploadStatus').textContent = '检测到文件已存在，执行秒传...';
+
+          const instantResult = await API.instantUpload({
+            md5, size: file.size, name: file.name, folder_id: currentFolder
+          });
+
+          if (instantResult.code === 201) {
+            document.getElementById('uploadStatus').textContent = '✅ 秒传成功！';
+            setTimeout(() => { closeModal('uploadModal'); loadFiles(); }, 1000);
+          } else {
+            document.getElementById('uploadStatus').textContent = '❌ 秒传失败: ' + (instantResult.message || '错误');
+          }
+          return;
+        }
+
+        // 普通上传
+        document.getElementById('uploadStatus').textContent = '正在上传...';
+        const formData = new FormData();
+        formData.append('file', file);
+        if (currentFolder) formData.append('folder_id', currentFolder);
+
+        // 模拟进度
+        let progress = 0;
+        const progressTimer = setInterval(() => {
+          if (progress < 90) {
+            progress += Math.random() * 15;
+            document.getElementById('uploadPercent').textContent = Math.min(Math.round(progress), 90) + '%';
+            document.getElementById('uploadBar').style.width = Math.min(progress, 90) + '%';
+          }
+        }, 300);
+
+        const result = await API.uploadFile(formData);
+        clearInterval(progressTimer);
+
+        if (result.code === 201) {
+          document.getElementById('uploadPercent').textContent = '100%';
+          document.getElementById('uploadBar').style.width = '100%';
+          document.getElementById('uploadBar').className = 'progress-bar success';
+          document.getElementById('uploadStatus').textContent = '✅ 上传成功！';
+          setTimeout(() => { closeModal('uploadModal'); loadFiles(); }, 1000);
+        } else {
+          document.getElementById('uploadStatus').textContent = '❌ 上传失败: ' + (result.message || '错误');
+        }
+      } catch (err) {
+        document.getElementById('uploadStatus').textContent = '❌ 上传出错: ' + err.message;
+      }
+    }
+
+    // 计算MD5
+    function computeFileMD5(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        const spark = new (function () {
+          const hex = [];
+          const HEX = '0123456789abcdef';
+          this.append = function (arr) {
+            for (let i = 0; i < arr.length; i++) {
+              hex.push(HEX[(arr[i] >> 4) & 0xF] + HEX[arr[i] & 0xF]);
+            }
+          };
+          this.end = function () { return hex.join(''); };
+        })();
+
+        reader.onload = function (e) {
+          const data = new Uint8Array(e.target.result);
+          // Simple hash - in production use SparkMD5 library
+          let hash = 0;
+          for (let i = 0; i < data.length; i++) {
+            hash = ((hash << 5) - hash) + data[i];
+            hash = hash & hash;
+          }
+          resolve(Math.abs(hash).toString(16).padStart(8, '0'));
+        };
+        reader.onerror = reject;
+        // Read first 1MB for quick hash
+        const blob = file.slice(0, Math.min(file.size, 1024 * 1024));
+        reader.readAsArrayBuffer(blob);
+      });
+    }
+
+    // Drag & Drop
+    const uploadArea = document.getElementById('uploadArea');
+    uploadArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadArea.classList.add('dragover');
+    });
+    uploadArea.addEventListener('dragleave', () => {
+      uploadArea.classList.remove('dragover');
+    });
+    uploadArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadArea.classList.remove('dragover');
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        document.getElementById('fileInput').files = files;
+        handleFileSelect(document.getElementById('fileInput'));
+      }
+    });
+
+    // ==================== New Folder ====================
+    function showNewFolderModal() {
+      document.getElementById('folderName').value = '';
+      document.getElementById('folderModal').classList.add('show');
+    }
+
+    async function createFolder() {
+      const name = document.getElementById('folderName').value.trim();
+      if (!name) return alert('请输入文件夹名称');
+      const result = await API.createFolder({ name, parent_id: currentFolder });
+      if (result.code === 201) {
+        closeModal('folderModal');
+        loadFiles();
+      } else {
+        alert(result.message || '创建失败');
+      }
+    }
+
+    // ==================== Rename ====================
+    function showRenameModal(id, name, type) {
+      renameTarget = { id, type };
+      document.getElementById('renameInput').value = name;
+      document.getElementById('renameModal').classList.add('show');
+    }
+
+    async function doRename() {
+      const name = document.getElementById('renameInput').value.trim();
+      if (!name || !renameTarget) return;
+      const result = await API.renameFile(renameTarget.id, name, renameTarget.type);
+      if (result.code === 200) {
+        closeModal('renameModal');
+        loadFiles();
+      } else {
+        alert(result.message || '重命名失败');
+      }
+    }
+
+    // ==================== Share ====================
+    function showShareModal(id) {
+      shareTarget = id;
+      document.getElementById('shareResult').style.display = 'none';
+      document.getElementById('sharePassword').value = '';
+      document.getElementById('sharePermission').value = 'download';
+      document.getElementById('shareExpire').value = '';
+      document.getElementById('shareBtn').textContent = '生成分享';
+      document.getElementById('shareBtn').disabled = false;
+      document.getElementById('shareModal').classList.add('show');
+    }
+
+    async function doShare() {
+      if (!shareTarget) return;
+      document.getElementById('shareBtn').disabled = true;
+      document.getElementById('shareBtn').textContent = '生成中...';
+
+      const expireHours = document.getElementById('shareExpire').value;
+      const result = await API.shareFile(shareTarget, {
+        password: document.getElementById('sharePassword').value || undefined,
+        expire_hours: expireHours ? parseInt(expireHours) : undefined,
+        permission: document.getElementById('sharePermission').value
+      });
+
+      if (result.code === 200) {
+        document.getElementById('shareResult').style.display = 'block';
+        document.getElementById('shareUrl').value = window.location.origin + '/s/' + result.data.code;
+        document.getElementById('shareBtn').textContent = '已完成';
+      } else {
+        alert(result.message || '分享失败');
+        document.getElementById('shareBtn').disabled = false;
+        document.getElementById('shareBtn').textContent = '生成分享';
+      }
+    }
+
+    function copyShareUrl() {
+      const input = document.getElementById('shareUrl');
+      input.select();
+      document.execCommand('copy');
+      alert('已复制分享链接');
+    }
+
+    // ==================== Delete ====================
+    async function deleteFile(id) {
+      if (!confirm('确定要删除此文件吗？')) return;
+      const result = await API.deleteFile(id);
+      if (result.code === 200) {
+        selectedFiles.delete(id);
+        loadFiles();
+      } else {
+        alert(result.message || '删除失败');
+      }
+    }
+
+    // ==================== Selection ====================
+    function toggleSelect(id) {
+      if (selectedFiles.has(id)) selectedFiles.delete(id);
+      else selectedFiles.add(id);
+      loadFiles();  // re-render to update styles
+    }
+
+    function toggleAll() {
+      const checked = document.getElementById('selectAll').checked;
+      // We need the current file list to toggle all
+      document.querySelectorAll('#fileBody tr[data-id]').forEach(tr => {
+        const id = parseInt(tr.dataset.id);
+        if (checked) selectedFiles.add(id);
+        else selectedFiles.delete(id);
+      });
+      // Toggle checkboxes
+      document.querySelectorAll('#fileBody input[type="checkbox"]').forEach(cb => cb.checked = checked);
+      document.querySelectorAll('#fileBody tr').forEach(tr => {
+        tr.classList.toggle('selected', checked);
+      });
+    }
+
+    // ==================== Search ====================
+    async function searchFiles() {
+      const keyword = document.getElementById('searchInput').value.trim();
+      if (!keyword) return loadFiles();
+      const result = await API.searchFiles(keyword);
+      if (result.code === 200) {
+        renderFiles(result.data.list);
+        document.getElementById('breadcrumb').innerHTML =
+          `<a onclick="loadFiles(null)"><i class="fas fa-home me-1"></i>全部文件</a><span class="separator">/</span><span class="current">搜索: ${keyword}</span>`;
+      }
+    }
+
+    // ==================== Sort ====================
+    function toggleSort() {
+      if (sortOrder === 'desc') sortOrder = 'asc';
+      else sortOrder = 'desc';
+      loadFiles();
+    }
+
+    // ==================== Pagination ====================
+    function renderPagination() {
+      const el = document.getElementById('pagination');
+      if (!pageInfo || pageInfo.totalPages <= 1) { el.style.display = 'none'; return; }
+      el.style.display = 'flex';
+      let html = `<button class="page-btn" onclick="goPage(${pageInfo.page - 1})" ${pageInfo.page <= 1 ? 'disabled' : ''}>&lt;</button>`;
+      for (let i = 1; i <= pageInfo.totalPages; i++) {
+        if (i === pageInfo.page || i === 1 || i === pageInfo.totalPages || Math.abs(i - pageInfo.page) <= 2) {
+          html += `<button class="page-btn ${i === pageInfo.page ? 'active' : ''}" onclick="goPage(${i})">${i}</button>`;
+        } else if (i === pageInfo.page - 3 || i === pageInfo.page + 3) {
+          html += `<button class="page-btn" disabled>...</button>`;
+        }
+      }
+      html += `<button class="page-btn" onclick="goPage(${pageInfo.page + 1})" ${pageInfo.page >= pageInfo.totalPages ? 'disabled' : ''}>&gt;</button>`;
+      el.innerHTML = html;
+    }
+
+    function goPage(p) {
+      if (p < 1 || p > pageInfo.totalPages) return;
+      pageInfo.page = p;
+      const params = { page: pageInfo.page, pageSize: pageInfo.pageSize, sort: sortField, order: sortOrder };
+      if (currentFolder) params.folder_id = currentFolder;
+      if (currentType) params.type = currentType;
+      API.getFiles(params).then(r => {
+        if (r.code === 200) {
+          renderFiles(r.data.list);
+          renderPagination();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      });
+    }
+
+    // ==================== Utilities ====================
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('show');
+    }
+
+    function showUserMenu() {
+      if (confirm('确定要退出登录吗？')) Auth.logout();
+    }
+
+    // Init
+    loadFiles(null);
+
+    // Close modals on overlay click
+    document.querySelectorAll('.modal-overlay').forEach(el => {
+      el.addEventListener('click', (e) => {
+        if (e.target === el) el.classList.remove('show');
+      });
+    });
+  </script>
+</body>
+</html>

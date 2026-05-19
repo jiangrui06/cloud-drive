@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>群组管理 - 企业云盘</title>
+  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.1/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h2><i class="fas fa-cloud me-2"></i>企业云盘</h2>
+        <p>Cloud Drive Management</p>
+      </div>
+      <nav class="sidebar-menu">
+        <div class="menu-item" onclick="location.href='/dashboard.html'"><i class="fas fa-home"></i>工作台</div>
+        <div class="menu-item" onclick="location.href='/file-manager.html'"><i class="fas fa-folder"></i>我的文件</div>
+        <div class="menu-item active" onclick="location.href='/admin/groups.html'"><i class="fas fa-users"></i>我的群组</div>
+        <div class="menu-divider" style="border-top:1px solid rgba(255,255,255,.1); margin:8px 16px;"></div>
+        <div class="menu-item" id="menuUsers3" onclick="location.href='/admin/users.html'" style="display:none;">
+          <i class="fas fa-user-cog"></i>用户管理
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-info" onclick="showUserMenu()">
+          <div class="user-avatar" id="userAvatar">A</div>
+          <div class="user-detail">
+            <div class="user-name" id="userName">加载中...</div>
+            <div class="user-role" id="userRole">-</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <div class="page-header">
+        <h3><i class="fas fa-users me-2"></i>群组管理</h3>
+        <div class="page-header-actions">
+          <button class="btn btn-primary btn-sm" onclick="showCreateGroupModal()">
+            <i class="fas fa-plus me-1"></i>创建群组
+          </button>
+        </div>
+      </div>
+
+      <div class="page-body">
+        <div class="file-toolbar">
+          <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="text" id="searchGroup" placeholder="搜索群组..." onkeyup="if(event.key==='Enter')loadGroups()">
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-body p-0">
+            <table class="data-table" id="groupTable">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>群组名称</th>
+                  <th>描述</th>
+                  <th>创建者</th>
+                  <th>成员数</th>
+                  <th>类型</th>
+                  <th>状态</th>
+                  <th>创建时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="groupBody">
+                <tr><td colspan="9" class="text-center text-muted py-4">加载中...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="pagination" class="pagination" style="display:none;"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Create Group Modal -->
+  <div class="modal-overlay" id="createGroupModal">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header">
+        <h4><i class="fas fa-plus-circle me-2"></i>创建群组</h4>
+        <button class="btn btn-sm btn-outline" onclick="closeModal('createGroupModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>群组名称 <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="groupName" placeholder="输入群组名称">
+        </div>
+        <div class="form-group">
+          <label>群组描述</label>
+          <textarea class="form-control" id="groupDesc" placeholder="群组描述" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label>类型</label>
+          <select class="form-control" id="groupType">
+            <option value="private">私有</option>
+            <option value="public">公开</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>最大成员数</label>
+          <input type="number" class="form-control" id="groupMaxMembers" value="50" min="1" max="500">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('createGroupModal')">取消</button>
+        <button class="btn btn-primary" onclick="createGroup()">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Group Detail Modal -->
+  <div class="modal-overlay" id="groupDetailModal">
+    <div class="modal" style="max-width:600px;">
+      <div class="modal-header">
+        <h4><i class="fas fa-info-circle me-2"></i>群组详情</h4>
+        <button class="btn btn-sm btn-outline" onclick="closeModal('groupDetailModal')">&times;</button>
+      </div>
+      <div class="modal-body" id="groupDetailBody">
+        <div class="text-center py-4 text-muted">加载中...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manage Members Modal -->
+  <div class="modal-overlay" id="memberModal">
+    <div class="modal" style="max-width:500px;">
+      <div class="modal-header">
+        <h4><i class="fas fa-user-friends me-2"></i>管理成员</h4>
+        <button class="btn btn-sm btn-outline" onclick="closeModal('memberModal')">&times;</button>
+      </div>
+      <div class="modal-body" id="memberBody">
+        <div class="text-center py-4 text-muted">加载中...</div>
+      </div>
+    </div>
+  </div>
+
+  <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">
+    <i class="fas fa-bars"></i>
+  </button>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    if (!Auth.check()) {}
+
+    const user = Auth.getUser();
+    if (user) {
+      document.getElementById('userName').textContent = user.nickname || user.username;
+      document.getElementById('userAvatar').textContent = (user.nickname || user.username)[0].toUpperCase();
+      document.getElementById('userRole').textContent = user.role === 'admin' ? '管理员' : '用户';
+      if (user.role === 'admin') document.getElementById('menuUsers3').style.display = 'flex';
+    }
+
+    let currentPage = 1;
+
+    async function loadGroups() {
+      const params = {
+        page: currentPage,
+        pageSize: 20,
+        keyword: document.getElementById('searchGroup').value
+      };
+
+      const result = await API.getGroups(params);
+      if (result.code !== 200) return;
+
+      const { list, pagination } = result.data;
+      const tbody = document.getElementById('groupBody');
+
+      if (!list || list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">暂无群组</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = list.map(g => `
+        <tr>
+          <td>${g.id}</td>
+          <td><strong>${g.name}</strong></td>
+          <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${g.description || '-'}</td>
+          <td>${g.owner_name || '-'}</td>
+          <td>${g.member_count}/${g.max_members}</td>
+          <td><span class="tag ${g.type === 'public' ? 'tag-active' : ''}">${g.type === 'public' ? '公开' : '私有'}</span></td>
+          <td><span class="tag ${g.status === 1 ? 'tag-active' : 'tag-disabled'}">${g.status === 1 ? '启用' : '禁用'}</span></td>
+          <td>${formatDate(g.created_at)}</td>
+          <td>
+            <div class="file-actions">
+              <button class="btn-icon" title="详情" onclick="showGroupDetail(${g.id})"><i class="fas fa-info-circle"></i></button>
+              <button class="btn-icon" title="成员" onclick="showMembers(${g.id})"><i class="fas fa-users"></i></button>
+              ${g.my_role === 'owner' || user?.role === 'admin' ? `
+              <button class="btn-icon" title="编辑" onclick="editGroup(${g.id}, '${g.name}', '${g.description || ''}', '${g.type}', ${g.max_members})">
+                <i class="fas fa-edit"></i>
+              </button>
+              <button class="btn-icon" title="删除" onclick="deleteGroup(${g.id})" style="color:var(--danger);"><i class="fas fa-trash"></i></button>` : ''}
+              ${!g.my_role ? `<button class="btn-icon" title="加入" onclick="joinGroup(${g.id})"><i class="fas fa-sign-in-alt"></i></button>` : ''}
+            </div>
+          </td>
+        </tr>
+      `).join('');
+
+      // Pagination
+      const pg = document.getElementById('pagination');
+      if (pagination.totalPages > 1) {
+        pg.style.display = 'flex';
+        let html = `<button class="page-btn" onclick="goPage(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>&lt;</button>`;
+        for (let i = 1; i <= pagination.totalPages; i++) {
+          html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="goPage(${i})">${i}</button>`;
+        }
+        html += `<button class="page-btn" onclick="goPage(${currentPage + 1})" ${currentPage >= pagination.totalPages ? 'disabled' : ''}>&gt;</button>`;
+        pg.innerHTML = html;
+      } else {
+        pg.style.display = 'none';
+      }
+    }
+
+    function goPage(p) {
+      if (p < 1) return;
+      currentPage = p;
+      loadGroups();
+    }
+
+    // ==================== Create Group ====================
+    function showCreateGroupModal() {
+      document.getElementById('groupName').value = '';
+      document.getElementById('groupDesc').value = '';
+      document.getElementById('groupType').value = 'private';
+      document.getElementById('groupMaxMembers').value = 50;
+      document.getElementById('createGroupModal').classList.add('show');
+    }
+
+    async function createGroup() {
+      const data = {
+        name: document.getElementById('groupName').value,
+        description: document.getElementById('groupDesc').value || undefined,
+        type: document.getElementById('groupType').value,
+        max_members: parseInt(document.getElementById('groupMaxMembers').value)
+      };
+      if (!data.name) return alert('请输入群组名称');
+
+      const result = await API.createGroup(data);
+      if (result.code === 201) {
+        closeModal('createGroupModal');
+        loadGroups();
+      } else {
+        alert(result.message || '创建失败');
+      }
+    }
+
+    // ==================== Edit Group ====================
+    let editGroupId = null;
+
+    function editGroup(id, name, desc, type, maxMembers) {
+      editGroupId = id;
+      document.getElementById('groupName').value = name;
+      document.getElementById('groupDesc').value = desc;
+      document.getElementById('groupType').value = type;
+      document.getElementById('groupMaxMembers').value = maxMembers;
+      document.getElementById('createGroupModal').classList.add('show');
+      // Override the create button action
+      document.querySelector('#createGroupModal .btn-primary').onclick = doEditGroup;
+    }
+
+    async function doEditGroup() {
+      const result = await API.updateGroup(editGroupId, {
+        name: document.getElementById('groupName').value,
+        description: document.getElementById('groupDesc').value || undefined,
+        type: document.getElementById('groupType').value,
+        max_members: parseInt(document.getElementById('groupMaxMembers').value)
+      });
+      if (result.code === 200) {
+        closeModal('createGroupModal');
+        loadGroups();
+      } else {
+        alert(result.message || '更新失败');
+      }
+      // Restore
+      document.querySelector('#createGroupModal .btn-primary').onclick = createGroup;
+    }
+
+    // ==================== Delete Group ====================
+    async function deleteGroup(id) {
+      if (!confirm('确定要删除此群组吗？')) return;
+      const result = await API.deleteGroup(id);
+      if (result.code === 200) loadGroups();
+      else alert(result.message || '删除失败');
+    }
+
+    // ==================== Join Group ====================
+    async function joinGroup(id) {
+      const result = await API.joinGroup(id);
+      if (result.code === 200) {
+        alert('已成功加入群组');
+        loadGroups();
+      } else {
+        alert(result.message || '加入失败');
+      }
+    }
+
+    // ==================== Group Detail ====================
+    async function showGroupDetail(id) {
+      document.getElementById('groupDetailBody').innerHTML = '<div class="text-center py-4 text-muted">加载中...</div>';
+      document.getElementById('groupDetailModal').classList.add('show');
+
+      const result = await API.getGroup(id);
+      if (result.code !== 200) {
+        document.getElementById('groupDetailBody').innerHTML = '<div class="text-center py-4 text-danger">加载失败</div>';
+        return;
+      }
+
+      const g = result.data;
+      let html = `
+        <div class="mb-4">
+          <h5>${g.name}</h5>
+          <p class="text-muted">${g.description || '暂无描述'}</p>
+          <div class="d-flex gap-3">
+            <span class="tag ${g.type === 'public' ? 'tag-active' : ''}">${g.type === 'public' ? '公开' : '私有'}</span>
+            <span class="tag ${g.status === 1 ? 'tag-active' : 'tag-disabled'}">${g.status === 1 ? '启用' : '禁用'}</span>
+            <span class="text-muted" style="font-size:13px;">创建者: ${g.owner_name}</span>
+          </div>
+        </div>
+        <h6 class="mb-3">成员列表 (${g.member_count})</h6>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead><tr><th>用户</th><th>角色</th><th>加入时间</th></tr></thead>
+            <tbody>
+              ${g.members.map(m => `
+                <tr>
+                  <td><strong>${m.nickname || m.username}</strong> <span class="text-muted">@${m.username}</span></td>
+                  <td><span class="tag ${m.role === 'owner' ? 'tag-owner' : m.role === 'admin' ? 'tag-admin' : 'tag-member'}">${m.role === 'owner' ? '群主' : m.role === 'admin' ? '管理员' : '成员'}</span></td>
+                  <td>${formatDate(m.joined_at)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+      document.getElementById('groupDetailBody').innerHTML = html;
+    }
+
+    // ==================== Manage Members ====================
+    let memberGroupId = null;
+
+    async function showMembers(groupId) {
+      memberGroupId = groupId;
+      document.getElementById('memberBody').innerHTML = '<div class="text-center py-4 text-muted">加载中...</div>';
+      document.getElementById('memberModal').classList.add('show');
+
+      const result = await API.getGroup(groupId);
+      if (result.code !== 200) return;
+
+      const g = result.data;
+      let html = `
+        <p class="mb-3"><strong>${g.name}</strong> - 成员管理</p>
+        <div class="mb-3">
+          <div class="d-flex gap-2">
+            <input type="text" class="form-control" id="addMemberInput" placeholder="输入用户ID添加成员">
+            <button class="btn btn-sm btn-primary" onclick="addMember(${groupId})">添加</button>
+          </div>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>用户</th><th>角色</th><th>操作</th></tr></thead>
+          <tbody>
+            ${g.members.map(m => `
+              <tr>
+                <td><strong>${m.nickname || m.username}</strong></td>
+                <td>
+                  <select class="form-control" style="width:auto;height:30px;font-size:12px;" onchange="changeRole(${groupId}, ${m.id}, this.value)">
+                    <option value="member" ${m.role === 'member' ? 'selected' : ''}>成员</option>
+                    <option value="admin" ${m.role === 'admin' ? 'selected' : ''}>管理员</option>
+                  </select>
+                </td>
+                <td>
+                  ${m.role !== 'owner' ? `<button class="btn btn-sm btn-danger" onclick="removeMember(${groupId}, ${m.id})">移除</button>` : '<span class="text-muted">群主</span>'}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+      document.getElementById('memberBody').innerHTML = html;
+    }
+
+    async function addMember(groupId) {
+      const userId = document.getElementById('addMemberInput').value;
+      if (!userId) return alert('请输入用户ID');
+      const result = await API.manageGroupMember(groupId, { userId: parseInt(userId), action: 'add' });
+      if (result.code === 200) {
+        showMembers(groupId);
+      } else {
+        alert(result.message || '添加失败');
+      }
+    }
+
+    async function removeMember(groupId, userId) {
+      if (!confirm('确定要移除该成员吗？')) return;
+      const result = await API.manageGroupMember(groupId, { userId, action: 'remove' });
+      if (result.code === 200) showMembers(groupId);
+      else alert(result.message || '移除失败');
+    }
+
+    async function changeRole(groupId, userId, role) {
+      const result = await API.manageGroupMember(groupId, { userId, action: 'setRole', role });
+      if (result.code !== 200) alert(result.message || '修改失败');
+    }
+
+    // ==================== Utilities ====================
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('show');
+      // Restore create button
+      document.querySelector('#createGroupModal .btn-primary').onclick = createGroup;
+    }
+
+    function showUserMenu() {
+      if (confirm('确定要退出登录吗？')) Auth.logout();
+    }
+
+    document.querySelectorAll('.modal-overlay').forEach(el => {
+      el.addEventListener('click', (e) => {
+        if (e.target === el) el.classList.remove('show');
+      });
+    });
+
+    loadGroups();
+  </script>
+</body>
+</html>
