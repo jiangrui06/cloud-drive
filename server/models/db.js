@@ -18,7 +18,7 @@ pool.getConnection()
 
 // 执行查询的便捷方法
 async function query(sql, params) {
-  const [rows] = await pool.execute(sql, params);
+  const [rows] = await pool.query(sql, params);
   return rows;
 }
 
@@ -30,13 +30,13 @@ async function queryOne(sql, params) {
 
 // 执行插入并返回插入ID
 async function insert(sql, params) {
-  const [result] = await pool.execute(sql, params);
+  const [result] = await pool.query(sql, params);
   return result.insertId;
 }
 
 // 执行更新并返回影响行数
 async function update(sql, params) {
-  const [result] = await pool.execute(sql, params);
+  const [result] = await pool.query(sql, params);
   return result.affectedRows;
 }
 

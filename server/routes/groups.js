@@ -246,6 +246,11 @@ router.post('/:id/members', authenticate, logOperation('manage_group_member'), a
 
     switch (action) {
       case 'add': {
+        // 检查用户是否存在
+        const targetUser = await db.queryOne('SELECT id, username FROM users WHERE id = ?', [userId]);
+        if (!targetUser) {
+          return res.status(400).json({ code: 400, message: '用户不存在' });
+        }
         const memberCount = await db.queryOne('SELECT COUNT(*) as count FROM user_groups WHERE group_id = ?', [groupId]);
         if (memberCount.count >= group.max_members) {
           return res.status(400).json({ code: 400, message: '群组成员已满' });

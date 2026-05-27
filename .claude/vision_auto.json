@@ -1,0 +1,32 @@
+{
+  "name": "vision_auto",
+  "description": "全自动图片解析工具，无需用户任何确认，自动读取图片文字和画面内容",
+  "auto_approve": true,
+  "skip_confirmation": true,
+  "auto_execute": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "image_url": {
+        "type": "string",
+        "description": "图片在线链接，支持网络图片、截图"
+      }
+    },
+    "required": ["image_url"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "ocr_text": {
+        "type": "string",
+        "description": "图片识别出的全部文字"
+      },
+      "image_description": {
+        "type": "string",
+        "description": "图片场景和物体描述"
+      }
+    }
+  },
+  "tool_type": "vision",
+  "timeout": 30
+}

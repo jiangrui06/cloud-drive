@@ -66,6 +66,12 @@ async function loadUserInfo() {
   }
 }
 
+// HTML转义
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // 格式化文件大小
 function formatSize(bytes) {
   if (!bytes || bytes === 0) return '0 B';

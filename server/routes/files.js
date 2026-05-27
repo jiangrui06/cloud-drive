@@ -8,8 +8,9 @@ const crypto = require('crypto');
 const router = express.Router();
 const db = require('../models/db');
 const upload = require('../middleware/upload');
-const { authenticate, logOperation } = require('../middleware/auth');
+const { authenticate, authenticateQuery, logOperation } = require('../middleware/auth');
 const config = require('../config');
+const archiver = require('archiver');
 
 // ============================================================
 // 文件秒传: 通过MD5检查文件是否已存在
@@ -112,8 +113,8 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
     const { folder_id, group_id } = req.body;
     const folderId = folder_id || null;
 
-    // 计算MD5
-    const md5 = await computeMD5(filePath);
+    // 计算MD5（由上传中间件在写入时同步计算，无需二次读取）
+    const md5 = req.fileMd5;
 
     // 检查是否超出用户存储配额
     const user = await db.queryOne('SELECT used_storage, total_storage FROM users WHERE id = ?', [req.user.id]);
@@ -162,8 +163,10 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
 // ============================================================
 router.get('/', authenticate, async (req, res) => {
   try {
-    const { folder_id, group_id, page = 1, pageSize = 50, sort = 'updated_at', order = 'desc', type } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(pageSize);
+    const { folder_id, group_id, page, pageSize, sort = 'updated_at', order = 'desc', type } = req.query;
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const pageSizeNum = Math.max(1, Math.min(200, parseInt(pageSize) || 50));
+    const offset = (pageNum - 1) * pageSizeNum;
 
     let where = 'WHERE f.is_deleted = 0';
     const params = [];
@@ -178,18 +181,18 @@ router.get('/', authenticate, async (req, res) => {
     } else {
       // 默认查看自己的文件
       where += ' AND f.owner_id = ? AND f.group_id IS NULL';
-      params.push(req.user.id);
+      params.push(Number(req.user.id));
     }
 
     // 文件类型过滤
     if (type) {
       const typeMap = {
-        image: "'jpg','jpeg','png','gif','bmp','webp','svg'",
-        document: "'doc','docx','xls','xlsx','ppt','pptx','pdf','txt','md'",
-        video: "'mp4','avi','mov','wmv','flv','mkv'",
-        audio: "'mp3','wav','wma','aac','flac'",
-        archive: "'zip','rar','7z','tar','gz'",
-        code: "'js','py','html','css','json','xml','sql','java','cpp','c','h','go','rs'"
+        image: "'.jpg','.jpeg','.png','.gif','.bmp','.webp','.svg'",
+        document: "'.doc','.docx','.xls','.xlsx','.ppt','.pptx','.pdf','.txt','.md'",
+        video: "'.mp4','.avi','.mov','.wmv','.flv','.mkv'",
+        audio: "'.mp3','.wav','.wma','.aac','.flac'",
+        archive: "'.zip','.rar','.7z','.tar','.gz'",
+        code: "'.js','.py','.html','.css','.json','.xml','.sql','.java','.cpp','.c','.h','.go','.rs'"
       };
       if (typeMap[type]) {
         where += ` AND f.extension IN (${typeMap[type]})`;
@@ -210,7 +213,7 @@ router.get('/', authenticate, async (req, res) => {
        ${where}
        ORDER BY ${sortField} ${sortOrder}
        LIMIT ? OFFSET ?`,
-      [...params, parseInt(pageSize), offset]
+      [...params, pageSizeNum, offset]
     );
 
     // 格式化
@@ -220,15 +223,41 @@ router.get('/', authenticate, async (req, res) => {
       f.is_editable = ['txt', 'md', 'json', 'xml', 'html', 'css', 'js', 'py', 'sql', 'csv', 'yml', 'yaml', 'ini', 'cfg', 'log', 'sh', 'bat'].includes(f.extension?.replace('.',''));
     });
 
+    // 同时获取当前目录下的子文件夹（含文件总大小）
+    let folders = [];
+    if (group_id) {
+      folders = await db.query(
+        `SELECT f.*, (SELECT COALESCE(SUM(files.size), 0) FROM files WHERE files.folder_id = f.id AND files.is_deleted = 0) AS total_size FROM folders f WHERE f.group_id = ? ORDER BY f.name ASC`,
+        [parseInt(group_id)]
+      );
+    } else if (folder_id) {
+      folders = await db.query(
+        `SELECT f.*, (SELECT COALESCE(SUM(files.size), 0) FROM files WHERE files.folder_id = f.id AND files.is_deleted = 0) AS total_size FROM folders f WHERE f.parent_id = ? AND f.owner_id = ? AND f.is_shared = 0 ORDER BY f.name ASC`,
+        [parseInt(folder_id), Number(req.user.id)]
+      );
+    } else {
+      folders = await db.query(
+        `SELECT f.*, (SELECT COALESCE(SUM(files.size), 0) FROM files WHERE files.folder_id = f.id AND files.is_deleted = 0) AS total_size FROM folders f WHERE f.parent_id IS NULL AND f.owner_id = ? AND f.group_id IS NULL AND f.is_shared = 0 ORDER BY f.name ASC`,
+        [Number(req.user.id)]
+      );
+    }
+
+    // 格式化文件夹
+    folders.forEach(f => {
+      f.total_size = Number(f.total_size) || 0;
+      f.size_formatted = formatSize(f.total_size);
+    });
+
     res.json({
       code: 200,
       data: {
         list: files,
+        folders,
         pagination: {
-          page: parseInt(page),
-          pageSize: parseInt(pageSize),
+          page: pageNum,
+          pageSize: pageSizeNum,
           total: countResult.total,
-          totalPages: Math.ceil(countResult.total / parseInt(pageSize))
+          totalPages: Math.ceil(countResult.total / pageSizeNum)
         }
       }
     });
@@ -389,6 +418,43 @@ router.post('/copy/:id', authenticate, logOperation('copy'), async (req, res) =>
 });
 
 // ============================================================
+// 删除文件夹
+// ============================================================
+router.delete('/folders/:id', authenticate, logOperation('delete_folder'), async (req, res) => {
+  try {
+    const folderId = parseInt(req.params.id);
+    const folder = await db.queryOne('SELECT * FROM folders WHERE id = ?', [folderId]);
+    if (!folder) return res.status(404).json({ code: 404, message: '文件夹不存在' });
+    if (folder.owner_id !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ code: 403, message: '无权限删除此文件夹' });
+    }
+
+    // 收集所有子文件夹ID（含自身）
+    const descendantRows = await db.query(
+      `WITH RECURSIVE descendant_folders AS (
+         SELECT id FROM folders WHERE id = ?
+         UNION ALL
+         SELECT f.id FROM folders f JOIN descendant_folders d ON f.parent_id = d.id
+       ) SELECT id FROM descendant_folders`,
+      [folderId]
+    );
+    const descendantIds = descendantRows.map(r => r.id);
+
+    // 软删除所有子文件夹中的文件
+    const filePlaceholders = descendantIds.map(() => '?').join(',');
+    await db.update(`UPDATE files SET is_deleted = 1 WHERE folder_id IN (${filePlaceholders})`, descendantIds);
+
+    // 删除文件夹（外键 CASCADE 会删除子文件夹）
+    await db.update('DELETE FROM folders WHERE id = ?', [folderId]);
+
+    res.json({ code: 200, message: '文件夹已删除' });
+  } catch (err) {
+    console.error('[Files] 删除文件夹失败:', err);
+    res.status(500).json({ code: 500, message: '服务器内部错误' });
+  }
+});
+
+// ============================================================
 // 删除文件（软删除）
 // ============================================================
 router.delete('/:id', authenticate, logOperation('delete'), async (req, res) => {
@@ -422,24 +488,48 @@ router.post('/batch-delete', authenticate, logOperation('batch_delete'), async (
       return res.status(400).json({ code: 400, message: '请选择要删除的文件' });
     }
 
-    for (const fileId of ids) {
-      const file = await db.queryOne('SELECT * FROM files WHERE id = ?', [fileId]);
-      if (file && (file.owner_id === req.user.id || req.user.role === 'admin')) {
-        await db.update('UPDATE files SET is_deleted = 1 WHERE id = ?', [fileId]);
-        await db.update('UPDATE users SET used_storage = GREATEST(0, used_storage - ?) WHERE id = ?', [file.size, file.owner_id]);
-      }
+    // 获取文件信息（权限过滤 + 存储用量）
+    const placeholders = ids.map(() => '?').join(',');
+    const files = await db.query(
+      `SELECT id, size, owner_id FROM files WHERE id IN (${placeholders}) AND (owner_id = ? OR ?) AND is_deleted = 0`,
+      [...ids, req.user.id, req.user.role === 'admin' ? 1 : 0]
+    );
+
+    if (files.length === 0) {
+      return res.status(404).json({ code: 404, message: '没有可删除的文件' });
     }
 
-    res.json({ code: 200, message: `已删除 ${ids.length} 个文件` });
+    const fileIds = files.map(f => f.id);
+
+    // 批量软删除
+    const delPlaceholders = fileIds.map(() => '?').join(',');
+    await db.update(
+      `UPDATE files SET is_deleted = 1 WHERE id IN (${delPlaceholders})`,
+      fileIds
+    );
+
+    // 批量更新存储用量（按 owner 分组）
+    const storageMap = {};
+    files.forEach(f => {
+      storageMap[f.owner_id] = (storageMap[f.owner_id] || 0) + Number(f.size);
+    });
+    for (const [ownerId, totalSize] of Object.entries(storageMap)) {
+      await db.update(
+        'UPDATE users SET used_storage = GREATEST(0, used_storage - ?) WHERE id = ?',
+        [totalSize, ownerId]
+      );
+    }
+
+    res.json({ code: 200, message: `已删除 ${files.length} 个文件` });
   } catch (err) {
     res.status(500).json({ code: 500, message: '服务器内部错误' });
   }
 });
 
 // ============================================================
-// 下载文件
+// 下载文件（支持 Header 或 URL Query 传 Token）
 // ============================================================
-router.get('/download/:id', authenticate, async (req, res) => {
+router.get('/download/:id', authenticateQuery, async (req, res) => {
   try {
     const fileId = parseInt(req.params.id);
     const file = await db.queryOne('SELECT * FROM files WHERE id = ? AND is_deleted = 0', [fileId]);
@@ -450,13 +540,77 @@ router.get('/download/:id', authenticate, async (req, res) => {
       return res.status(404).json({ code: 404, message: '文件存储丢失' });
     }
 
-    // 更新下载次数
     await db.update('UPDATE files SET download_count = download_count + 1 WHERE id = ?', [fileId]);
 
     res.download(filePath, file.name);
   } catch (err) {
     console.error('[Files] 下载失败:', err);
     res.status(500).json({ code: 500, message: '下载失败' });
+  }
+});
+
+// ============================================================
+// 下载文件夹（打包为 ZIP）
+// ============================================================
+router.get('/folders/download/:id', authenticateQuery, async (req, res) => {
+  try {
+    const folderId = parseInt(req.params.id);
+    const folder = await db.queryOne('SELECT * FROM folders WHERE id = ?', [folderId]);
+    if (!folder) return res.status(404).json({ code: 404, message: '文件夹不存在' });
+
+    // 收集所有子文件夹ID
+    const descendantRows = await db.query(
+      `WITH RECURSIVE descendant_folders AS (
+         SELECT id FROM folders WHERE id = ?
+         UNION ALL
+         SELECT f.id FROM folders f JOIN descendant_folders d ON f.parent_id = d.id
+       ) SELECT id FROM descendant_folders`,
+      [folderId]
+    );
+    const folderIds = descendantRows.map(r => r.id);
+
+    // 查询所有文件
+    const placeholders = folderIds.map(() => '?').join(',');
+    const files = await db.query(
+      `SELECT * FROM files WHERE folder_id IN (${placeholders}) AND is_deleted = 0`,
+      folderIds
+    );
+
+    if (files.length === 0) {
+      return res.status(404).json({ code: 404, message: '文件夹为空，无可下载的文件' });
+    }
+
+    // 设置响应头
+    const zipName = encodeURIComponent(folder.name) + '.zip';
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${zipName}"; filename*=UTF-8''${zipName}`);
+
+    // 创建 zip 流
+    const archive = new archiver.ZipArchive();
+    archive.pipe(res);
+
+    let hasError = false;
+    archive.on('error', (err) => {
+      hasError = true;
+      console.error('[Files] 打包失败:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ code: 500, message: '打包失败' });
+      }
+    });
+
+    for (const file of files) {
+      const filePath = path.join(config.storage.root, file.storage_path);
+      if (fs.existsSync(filePath)) {
+        archive.file(filePath, { name: file.name });
+      }
+    }
+
+    await archive.finalize();
+  } catch (err) {
+    console.error('[Files] 文件夹下载失败:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ code: 500, message: '服务器内部错误' });
+    }
   }
 });
 
@@ -601,6 +755,58 @@ router.post('/share/:id', authenticate, logOperation('share'), async (req, res) 
 });
 
 // ============================================================
+// 获取我的分享列表
+// ============================================================
+router.get('/shared', authenticate, async (req, res) => {
+  try {
+    const shares = await db.query(
+      `SELECT sl.*, f.name, f.size, f.extension, f.mime_type
+       FROM share_links sl
+       LEFT JOIN files f ON sl.file_id = f.id
+       WHERE sl.owner_id = ? AND sl.status = 1
+       ORDER BY sl.created_at DESC`,
+      [req.user.id]
+    );
+
+    shares.forEach(s => { s.size_formatted = formatSize(s.size); });
+    res.json({ code: 200, data: { list: shares } });
+  } catch (err) {
+    console.error('[Files] 获取分享列表失败:', err);
+    res.status(500).json({ code: 500, message: '服务器内部错误' });
+  }
+});
+
+// ============================================================
+// 取消分享
+// ============================================================
+router.delete('/share/:id', authenticate, logOperation('cancel_share'), async (req, res) => {
+  try {
+    const shareId = parseInt(req.params.id);
+    const share = await db.queryOne('SELECT * FROM share_links WHERE id = ?', [shareId]);
+    if (!share) return res.status(404).json({ code: 404, message: '分享链接不存在' });
+    if (share.owner_id !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ code: 403, message: '无权限' });
+    }
+
+    await db.update('UPDATE share_links SET status = 0 WHERE id = ?', [shareId]);
+
+    // 检查该文件是否还有其他有效分享
+    const otherShares = await db.queryOne(
+      'SELECT COUNT(*) as count FROM share_links WHERE file_id = ? AND status = 1 AND id != ?',
+      [share.file_id, shareId]
+    );
+    if (otherShares.count === 0) {
+      await db.update('UPDATE files SET is_shared = 0 WHERE id = ?', [share.file_id]);
+    }
+
+    res.json({ code: 200, message: '已取消分享' });
+  } catch (err) {
+    console.error('[Files] 取消分享失败:', err);
+    res.status(500).json({ code: 500, message: '服务器内部错误' });
+  }
+});
+
+// ============================================================
 // 搜索文件
 // ============================================================
 router.get('/search', authenticate, async (req, res) => {
@@ -696,21 +902,123 @@ router.get('/storage/stats', authenticate, async (req, res) => {
 });
 
 // ============================================================
+// 获取群组存储统计
+// ============================================================
+router.get('/storage/group-stats/:groupId', authenticate, async (req, res) => {
+  try {
+    const groupId = parseInt(req.params.groupId);
+
+    // 检查群组成员身份
+    const membership = await db.queryOne(
+      'SELECT role FROM user_groups WHERE user_id = ? AND group_id = ?',
+      [req.user.id, groupId]
+    );
+    if (!membership && req.user.role !== 'admin') {
+      return res.status(403).json({ code: 403, message: '您不是该群组成员' });
+    }
+
+    // 获取群组文件统计
+    const storageResult = await db.queryOne(
+      'SELECT COUNT(*) as total_files, COALESCE(SUM(size), 0) as used_storage FROM files WHERE group_id = ? AND is_deleted = 0',
+      [groupId]
+    );
+
+    // 文件类型统计
+    const typeStats = await db.query(
+      `SELECT extension, COUNT(*) as count, SUM(size) as total_size
+       FROM files WHERE group_id = ? AND is_deleted = 0
+       GROUP BY extension ORDER BY total_size DESC LIMIT 10`,
+      [groupId]
+    );
+
+    // 各文件夹存储分布
+    const folderStats = await db.query(
+      `SELECT f.id, f.name,
+        COUNT(fi.id) as file_count,
+        COALESCE(SUM(fi.size), 0) as total_size
+       FROM folders f
+       LEFT JOIN files fi ON fi.folder_id = f.id AND fi.is_deleted = 0
+       WHERE f.group_id = ?
+       GROUP BY f.id, f.name ORDER BY total_size DESC`,
+      [groupId]
+    );
+
+    res.json({
+      code: 200,
+      data: {
+        total_files: storageResult.total_files,
+        used_storage: Number(storageResult.used_storage) || 0,
+        type_stats: typeStats.map(t => ({ ...t, total_size: Number(t.total_size) || 0 })),
+        folder_stats: folderStats.map(f => ({ ...f, total_size: Number(f.total_size) || 0 }))
+      }
+    });
+  } catch (err) {
+    console.error('[Files] 获取群组存储统计失败:', err);
+    res.status(500).json({ code: 500, message: '服务器内部错误' });
+  }
+});
+
+// ============================================================
+// 文件夹分析
+// ============================================================
+router.get('/stats/folder/:folderId', authenticate, async (req, res) => {
+  try {
+    const folderId = parseInt(req.params.folderId);
+
+    // 检查文件夹是否存在且有权限访问
+    const folder = await db.queryOne('SELECT * FROM folders WHERE id = ?', [folderId]);
+    if (!folder) return res.status(404).json({ code: 404, message: '文件夹不存在' });
+    if (folder.owner_id !== req.user.id && req.user.role !== 'admin' && !folder.group_id) {
+      return res.status(403).json({ code: 403, message: '无权限访问此文件夹' });
+    }
+
+    // 文件类型统计
+    const typeStats = await db.query(
+      `SELECT extension, COUNT(*) as count, SUM(size) as total_size
+       FROM files WHERE folder_id = ? AND is_deleted = 0
+       GROUP BY extension ORDER BY total_size DESC`,
+      [folderId]
+    );
+
+    // 总体统计
+    const totalStats = await db.queryOne(
+      'SELECT COUNT(*) as total_files, COALESCE(SUM(size), 0) as total_size FROM files WHERE folder_id = ? AND is_deleted = 0',
+      [folderId]
+    );
+
+    // 子文件夹统计
+    const subfolderStats = await db.query(
+      `SELECT sf.id, sf.name,
+        (SELECT COUNT(*) FROM files WHERE folder_id = sf.id AND is_deleted = 0) as file_count,
+        (SELECT COALESCE(SUM(size), 0) FROM files WHERE folder_id = sf.id AND is_deleted = 0) as total_size
+       FROM folders sf WHERE sf.parent_id = ?
+       ORDER BY total_size DESC`,
+      [folderId]
+    );
+
+    res.json({
+      code: 200,
+      data: {
+        folder_name: folder.name,
+        total_files: totalStats.total_files || 0,
+        total_size: Number(totalStats.total_size) || 0,
+        type_stats: typeStats.map(t => ({ ...t, total_size: Number(t.total_size) || 0 })),
+        subfolder_stats: subfolderStats.map(s => ({ ...s, total_size: Number(s.total_size) || 0 }))
+      }
+    });
+  } catch (err) {
+    console.error('[Files] 获取文件夹分析失败:', err);
+    res.status(500).json({ code: 500, message: '服务器内部错误' });
+  }
+});
+
+// ============================================================
 // 辅助函数
 // ============================================================
 
-function computeMD5(filePath) {
-  return new Promise((resolve, reject) => {
-    const hash = crypto.createHash('md5');
-    const stream = fs.createReadStream(filePath);
-    stream.on('data', data => hash.update(data));
-    stream.on('end', () => resolve(hash.digest('hex')));
-    stream.on('error', reject);
-  });
-}
-
 function formatSize(bytes) {
-  if (bytes === 0) return '0 B';
+  bytes = Number(bytes);
+  if (!bytes || bytes <= 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const k = 1024;
   const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -734,14 +1042,15 @@ function buildFolderTree(folders) {
 }
 
 async function isChildFolder(parentId, childId) {
-  const folders = await db.query('SELECT id, parent_id FROM folders');
-  let current = parentId;
-  while (current) {
-    if (current === childId) return true;
-    const folder = folders.find(f => f.id === current);
-    current = folder ? folder.parent_id : null;
-  }
-  return false;
+  const result = await db.queryOne(
+    `WITH RECURSIVE ancestors AS (
+       SELECT id, parent_id FROM folders WHERE id = ?
+       UNION ALL
+       SELECT f.id, f.parent_id FROM folders f JOIN ancestors a ON f.id = a.parent_id
+     ) SELECT id FROM ancestors WHERE id = ?`,
+    [parentId, childId]
+  );
+  return !!result;
 }
 
 module.exports = router;

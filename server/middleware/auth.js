@@ -6,7 +6,7 @@ const config = require('../config');
 const db = require('../models/db');
 
 // 验证JWT Token
-function authenticate(req, res, next) {
+async function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ code: 401, message: '未提供认证令牌' });
@@ -15,6 +15,11 @@ function authenticate(req, res, next) {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, config.jwt.secret);
+    // 验证用户仍然存在且状态正常
+    const user = await db.queryOne('SELECT id, role FROM users WHERE id = ? AND status = 1', [decoded.id]);
+    if (!user) {
+      return res.status(401).json({ code: 401, message: '用户不存在或已被禁用' });
+    }
     req.user = decoded;
     next();
   } catch (err) {
@@ -35,9 +40,8 @@ function requireAdmin(req, res, next) {
 
 // 可选认证（不强制要求登录）
 function optionalAuth(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
+  const token = extractToken(req);
+  if (token) {
     try {
       const decoded = jwt.verify(token, config.jwt.secret);
       req.user = decoded;
@@ -46,6 +50,33 @@ function optionalAuth(req, res, next) {
     }
   }
   next();
+}
+
+// 从请求中提取JWT（支持 Header 或 URL Query）
+function extractToken(req) {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.split(' ')[1];
+  }
+  if (req.query && req.query.token) {
+    return req.query.token;
+  }
+  return null;
+}
+
+// 从请求中提取并验证JWT（支持 Header 或 URL Query）
+function authenticateQuery(req, res, next) {
+  const token = extractToken(req);
+  if (!token) {
+    return res.status(401).json({ code: 401, message: '未提供认证令牌' });
+  }
+  try {
+    const decoded = jwt.verify(token, config.jwt.secret);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ code: 401, message: '无效的认证令牌' });
+  }
 }
 
 // 记录操作日志
@@ -89,4 +120,4 @@ function sanitizeBody(body) {
   return sanitized;
 }
 
-module.exports = { authenticate, requireAdmin, optionalAuth, logOperation };
+module.exports = { authenticate, requireAdmin, optionalAuth, authenticateQuery, logOperation };

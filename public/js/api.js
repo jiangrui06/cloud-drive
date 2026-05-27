@@ -37,18 +37,21 @@ const API = {
       const resp = await fetch(`${this.BASE}${url}`, options);
       const result = await resp.json();
       if (!resp.ok && resp.status === 401) {
-        // Token过期，尝试刷新
-        const refreshed = await this._tryRefresh();
-        if (refreshed) {
-          // 重试
-          options.headers = isFormData ? this._formDataHeaders() : this._headers();
-          const retryResp = await fetch(`${this.BASE}${url}`, options);
-          return await retryResp.json();
+        // 只在已有 Token 的情况下尝试自动刷新（避免拦截登录/注册请求）
+        const token = localStorage.getItem('token');
+        if (token) {
+          const refreshed = await this._tryRefresh();
+          if (refreshed) {
+            // 重试
+            options.headers = isFormData ? this._formDataHeaders() : this._headers();
+            const retryResp = await fetch(`${this.BASE}${url}`, options);
+            return await retryResp.json();
+          }
+          // 刷新失败，跳转登录
+          localStorage.clear();
+          window.location.href = '/login.html';
+          return null;
         }
-        // 刷新失败，跳转登录
-        localStorage.clear();
-        window.location.href = '/login.html';
-        return null;
       }
       return result;
     } catch (err) {
@@ -104,17 +107,23 @@ const API = {
   moveFile(id, folderId, type) { return this.put(`/files/move/${id}`, { folder_id: folderId, type }); },
   copyFile(id, folderId) { return this.post(`/files/copy/${id}`, { folder_id: folderId }); },
   deleteFile(id) { return this.del(`/files/${id}`); },
+  deleteFolder(id) { return this.del(`/files/folders/${id}`); },
   batchDelete(ids) { return this.post('/files/batch-delete', { ids }); },
   uploadFile(formData) { return this.upload('/files/upload', formData); },
   checkHash(md5, size) { return this.post('/files/check-hash', { md5, size }); },
   instantUpload(data) { return this.post('/files/instant', data); },
-  downloadFile(id) { window.open(`/api/files/download/${id}`, '_blank'); },
+  downloadFile(id) { window.open(`/api/files/download/${id}?token=${encodeURIComponent(localStorage.getItem('token'))}`, '_blank'); },
+  downloadFolder(id) { window.open(`/api/files/folders/download/${id}?token=${encodeURIComponent(localStorage.getItem('token'))}`, '_blank'); },
   previewFile(id) { return this.get(`/files/preview/${id}`); },
   saveFile(id, content) { return this.put(`/files/save/${id}`, { content }); },
   shareFile(id, data) { return this.post(`/files/share/${id}`, data); },
+  cancelShare(id) { return this.del(`/files/share/${id}`); },
+  getSharedFiles() { return this.get('/files/shared'); },
   searchFiles(keyword, page) { return this.get(`/files/search?keyword=${encodeURIComponent(keyword)}&page=${page || 1}`); },
   getRecentFiles(limit) { return this.get(`/files/recent?limit=${limit || 20}`); },
   getStorageStats() { return this.get('/files/storage/stats'); },
+  getGroupStorageStats(groupId) { return this.get(`/files/storage/group-stats/${groupId}`); },
+  getFolderAnalysis(folderId) { return this.get(`/files/stats/folder/${folderId}`); },
 
   // ==================== 用户接口 ====================
   getUsers(params) { return this.get('/users?' + new URLSearchParams(params || {})); },

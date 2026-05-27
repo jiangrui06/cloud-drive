@@ -19,13 +19,14 @@
       <nav class="sidebar-menu">
         <div class="menu-item" onclick="location.href='/dashboard.html'"><i class="fas fa-home"></i>工作台</div>
         <div class="menu-item active" onclick="location.href='/file-manager.html'"><i class="fas fa-folder"></i>我的文件</div>
-        <div class="menu-item" onclick="location.href='/file-manager.html?type=recent'"><i class="fas fa-clock"></i>最近文件</div>
-        <div class="menu-item" onclick="location.href='/file-manager.html?type=shared'"><i class="fas fa-share-alt"></i>共享文件</div>
+        <div class="menu-item menu-sub" onclick="location.href='/file-manager.html?type=recent'" id="menuRecent"><i class="fas fa-clock"></i>最近文件</div>
+        <div class="menu-item menu-sub" onclick="location.href='/file-manager.html?type=shared'" id="menuShared"><i class="fas fa-share-alt"></i>共享文件</div>
         <div class="menu-item" onclick="location.href='/admin/groups.html'"><i class="fas fa-users"></i>我的群组</div>
         <div class="menu-divider" style="border-top:1px solid rgba(255,255,255,.1); margin:8px 16px;"></div>
         <div class="menu-item" id="menuUsers2" onclick="location.href='/admin/users.html'" style="display:none;">
           <i class="fas fa-user-cog"></i>用户管理<span class="badge">Admin</span>
         </div>
+        <div class="menu-item" onclick="showStorageModal()"><i class="fas fa-database"></i>存储统计</div>
       </nav>
       <div class="sidebar-footer">
         <div class="user-info" onclick="showUserMenu()">
@@ -215,11 +216,39 @@
     </div>
   </div>
 
+  <!-- Folder Analysis Modal -->
+  <div class="modal-overlay" id="analysisModal">
+    <div class="modal" style="max-width:600px;">
+      <div class="modal-header">
+        <h4><i class="fas fa-chart-pie me-2"></i>文件夹分析</h4>
+        <button class="btn btn-sm btn-outline" onclick="closeModal('analysisModal')">&times;</button>
+      </div>
+      <div class="modal-body" id="analysisBody">
+        <div class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>分析中...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Storage Modal -->
+  <div class="modal-overlay" id="storageModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h4><i class="fas fa-chart-bar me-2"></i>存储统计</h4>
+        <button class="btn btn-sm btn-outline" onclick="closeModal('storageModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="storageChart"></div>
+        <div class="mt-3" id="typeStats"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Mobile sidebar toggle -->
   <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">
     <i class="fas fa-bars"></i>
   </button>
 
+  <script src="https://cdn.bootcdn.net/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script>
@@ -238,6 +267,7 @@
     // ==================== State ====================
     let currentFolder = null;       // current folder ID
     let currentType = null;        // file type filter
+    let pageMode = 'files';       // 'files', 'recent', 'shared'
     let sortField = 'updated_at';
     let sortOrder = 'desc';
     let selectedFiles = new Set();
@@ -245,33 +275,80 @@
     let shareTarget = null;
     let pageInfo = { page: 1, pageSize: 50, total: 0 };
 
+    // ==================== Init: check URL params ====================
+    (function initPageMode() {
+      const params = new URLSearchParams(window.location.search);
+      const type = params.get('type');
+      if (type === 'recent') {
+        pageMode = 'recent';
+        document.querySelector('.page-header h3').innerHTML = '<i class="fas fa-clock me-2"></i>最近文件';
+        document.getElementById('menuRecent').classList.add('active');
+      } else if (type === 'shared') {
+        pageMode = 'shared';
+        document.querySelector('.page-header h3').innerHTML = '<i class="fas fa-share-alt me-2"></i>共享文件';
+        document.getElementById('menuShared').classList.add('active');
+      }
+    })();
+
     // ==================== Load Files ====================
     async function loadFiles(folderId) {
       if (folderId !== undefined) currentFolder = folderId;
-      currentType = document.getElementById('typeFilter').value;
+      if (pageMode === 'files') {
+        currentType = document.getElementById('typeFilter').value;
+      }
       pageInfo.page = 1;
+
+      let result;
+      if (pageMode === 'recent') {
+        result = await API.getRecentFiles(50);
+        if (result.code === 200) {
+          renderFiles(result.data.list);
+          document.getElementById('breadcrumb').innerHTML =
+            '<a onclick="location.href=\'/file-manager.html\'"><i class="fas fa-home me-1"></i>全部文件</a><span class="separator">/</span><span class="current">最近文件</span>';
+          document.getElementById('pagination').style.display = 'none';
+        } else {
+          document.getElementById('fileBody').innerHTML =
+            '<tr><td colspan="5" class="text-center text-muted py-4">加载失败</td></tr>';
+        }
+        return;
+      } else if (pageMode === 'shared') {
+        result = await API.get('/files/shared');
+        if (result.code === 200) {
+          renderSharedFiles(result.data.list);
+          document.getElementById('breadcrumb').innerHTML =
+            '<a onclick="location.href=\'/file-manager.html\'"><i class="fas fa-home me-1"></i>全部文件</a><span class="separator">/</span><span class="current">共享文件</a>';
+          document.getElementById('pagination').style.display = 'none';
+        } else {
+          document.getElementById('fileBody').innerHTML =
+            '<tr><td colspan="5" class="text-center text-muted py-4">加载失败</td></tr>';
+        }
+        return;
+      }
 
       const params = { page: pageInfo.page, pageSize: pageInfo.pageSize, sort: sortField, order: sortOrder };
       if (currentFolder) params.folder_id = currentFolder;
       if (currentType) params.type = currentType;
 
-      const result = await API.getFiles(params);
+      result = await API.getFiles(params);
       if (result.code !== 200) {
         document.getElementById('fileBody').innerHTML =
           '<tr><td colspan="5" class="text-center text-muted py-4">加载失败</td></tr>';
         return;
       }
 
-      const { list, pagination } = result.data;
+      const { list, folders, pagination } = result.data;
       pageInfo = pagination;
-      renderFiles(list);
+      renderFiles(list, folders);
       renderBreadcrumb();
       renderPagination();
     }
 
-    function renderFiles(files) {
+    function renderFiles(files, folders) {
       const tbody = document.getElementById('fileBody');
-      if (!files || files.length === 0) {
+      const hasFolders = folders && folders.length > 0;
+      const hasFiles = files && files.length > 0;
+
+      if (!hasFolders && !hasFiles) {
         tbody.innerHTML = `<tr>
           <td colspan="5">
             <div class="empty-state">
@@ -284,7 +361,37 @@
         return;
       }
 
-      tbody.innerHTML = files.map(f => {
+      let html = '';
+
+      // 渲染文件夹（显示在文件前面）
+      if (hasFolders) {
+        folders.forEach(f => {
+          const isSelected = selectedFiles.has(f.id);
+          html += `<tr class="${isSelected ? 'selected' : ''}" data-id="${f.id}" data-type="folder">
+            <td><input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleSelect(${f.id})"></td>
+            <td>
+              <div class="file-name-cell" onclick="loadFiles(${f.id})" style="cursor:pointer;">
+                <span class="file-icon folder"><i class="fas fa-folder" style="color:#ffc107;"></i></span>
+                <span class="name">${escapeHtml(f.name)}</span>
+              </div>
+            </td>
+            <td>${f.total_size > 0 ? formatSize(f.total_size) : '-'}</td>
+            <td>${formatDate(f.updated_at)}</td>
+            <td>
+              <div class="file-actions">
+                <button class="btn-icon" title="分析" onclick="event.stopPropagation();showFolderAnalysis(${f.id})"><i class="fas fa-chart-pie"></i></button>
+                <button class="btn-icon" title="下载" onclick="event.stopPropagation();API.downloadFolder(${f.id})"><i class="fas fa-download"></i></button>
+                <button class="btn-icon" title="重命名" onclick="event.stopPropagation();showRenameModal(${f.id}, '${escapeHtml(f.name).replace(/'/g, "\\'")}', 'folder')"><i class="fas fa-pen"></i></button>
+                <button class="btn-icon" title="删除" onclick="event.stopPropagation();deleteFolder(${f.id})" style="color:var(--danger);"><i class="fas fa-trash"></i></button>
+              </div>
+            </td>
+          </tr>`;
+        });
+      }
+
+      // 渲染文件
+      if (hasFiles) {
+        html += files.map(f => {
         const ext = (f.extension || '').replace('.', '');
         const icon = getFileIcon(ext);
         let iconClass = '';
@@ -301,9 +408,9 @@
         return `<tr class="${isSelected ? 'selected' : ''}" data-id="${f.id}">
           <td><input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleSelect(${f.id})"></td>
           <td>
-            <div class="file-name-cell" onclick="openFile(${f.id}, '${ext}', '${f.name.replace(/'/g, "\\'")}')">
+            <div class="file-name-cell" onclick="openFile(${f.id}, '${ext}', '${escapeHtml(f.name).replace(/'/g, "\\'")}')">
               <span class="file-icon ${iconClass}"><i class="fas ${icon}"></i></span>
-              <span class="name">${f.name}</span>
+              <span class="name">${escapeHtml(f.name)}</span>
             </div>
           </td>
           <td>${formatSize(f.size)}</td>
@@ -313,12 +420,84 @@
               ${canEdit ? `<button class="btn-icon" title="在线编辑" onclick="event.stopPropagation();editFile(${f.id})"><i class="fas fa-edit"></i></button>` : ''}
               <button class="btn-icon" title="下载" onclick="event.stopPropagation();API.downloadFile(${f.id})"><i class="fas fa-download"></i></button>
               <button class="btn-icon" title="分享" onclick="event.stopPropagation();showShareModal(${f.id})"><i class="fas fa-share-alt"></i></button>
-              <button class="btn-icon" title="重命名" onclick="event.stopPropagation();showRenameModal(${f.id}, '${f.name.replace(/'/g, "\\'")}', 'file')"><i class="fas fa-pen"></i></button>
+              <button class="btn-icon" title="重命名" onclick="event.stopPropagation();showRenameModal(${f.id}, '${escapeHtml(f.name).replace(/'/g, "\\'")}', 'file')"><i class="fas fa-pen"></i></button>
               <button class="btn-icon" title="删除" onclick="event.stopPropagation();deleteFile(${f.id})" style="color:var(--danger);"><i class="fas fa-trash"></i></button>
             </div>
           </td>
         </tr>`;
       }).join('');
+      }
+
+      tbody.innerHTML = html;
+    }
+
+    // ==================== Render Shared Files ====================
+    function renderSharedFiles(shares) {
+      const tbody = document.getElementById('fileBody');
+      if (!shares || shares.length === 0) {
+        tbody.innerHTML = `<tr>
+          <td colspan="5">
+            <div class="empty-state">
+              <i class="fas fa-share-alt"></i>
+              <h4>暂无共享文件</h4>
+              <p>在文件列表中点击分享按钮来分享文件</p>
+            </div>
+          </td>
+        </tr>`;
+        return;
+      }
+
+      tbody.innerHTML = shares.map(s => {
+        const ext = (s.extension || '').replace('.', '');
+        const icon = getFileIcon(ext);
+        const shareUrl = window.location.origin + '/s/' + s.code;
+        const expireText = s.expire_time ? formatDate(s.expire_time) : '永久有效';
+        return `<tr>
+          <td><input type="checkbox" disabled></td>
+          <td>
+            <div class="file-name-cell">
+              <span class="file-icon"><i class="fas ${icon}"></i></span>
+              <span class="name">${escapeHtml(s.name)}</span>
+              <span class="tag tag-active" style="margin-left:8px;font-size:11px;">已分享</span>
+            </div>
+          </td>
+          <td>${formatSize(s.size)}</td>
+          <td style="font-size:12px;">
+            <div>密码: ${s.password ? '是' : '无'}</div>
+            <div>到期: ${expireText}</div>
+            <div>下载: ${s.download_count || 0}次</div>
+          </td>
+          <td>
+            <div class="file-actions">
+              <button class="btn-icon" title="复制链接" onclick="event.stopPropagation();copyText('${shareUrl}')"><i class="fas fa-link"></i></button>
+              <button class="btn-icon" title="下载" onclick="event.stopPropagation();API.downloadFile(${s.file_id})"><i class="fas fa-download"></i></button>
+              <button class="btn-icon" title="取消分享" onclick="event.stopPropagation();cancelShare(${s.id}, ${s.file_id})" style="color:var(--danger);"><i class="fas fa-times"></i></button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    function copyText(text) {
+      navigator.clipboard.writeText(text).then(() => alert('已复制链接')).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        alert('已复制链接');
+      });
+    }
+
+    async function cancelShare(shareId, fileId) {
+      if (!confirm('确定要取消此文件的分享吗？')) return;
+      const result = await API.cancelShare(shareId);
+      if (result.code === 200) {
+        loadFiles();
+      } else {
+        alert(result.message || '取消分享失败');
+      }
     }
 
     // ==================== Breadcrumb ====================
@@ -437,35 +616,27 @@
       }
     }
 
-    // 计算MD5
+    // 计算MD5 (使用SparkMD5，全文件读取以确保准确性)
     function computeFileMD5(file) {
       return new Promise((resolve, reject) => {
+        const spark = new SparkMD5.ArrayBuffer();
         const reader = new FileReader();
-        const spark = new (function () {
-          const hex = [];
-          const HEX = '0123456789abcdef';
-          this.append = function (arr) {
-            for (let i = 0; i < arr.length; i++) {
-              hex.push(HEX[(arr[i] >> 4) & 0xF] + HEX[arr[i] & 0xF]);
-            }
-          };
-          this.end = function () { return hex.join(''); };
-        })();
+        const chunkSize = 2 * 1024 * 1024; // 分块读取，每块2MB
+        let currentPos = 0;
 
         reader.onload = function (e) {
-          const data = new Uint8Array(e.target.result);
-          // Simple hash - in production use SparkMD5 library
-          let hash = 0;
-          for (let i = 0; i < data.length; i++) {
-            hash = ((hash << 5) - hash) + data[i];
-            hash = hash & hash;
+          spark.append(e.target.result);
+          currentPos += chunkSize;
+          if (currentPos < file.size) {
+            const nextChunk = file.slice(currentPos, Math.min(currentPos + chunkSize, file.size));
+            reader.readAsArrayBuffer(nextChunk);
+          } else {
+            resolve(spark.end());
           }
-          resolve(Math.abs(hash).toString(16).padStart(8, '0'));
         };
         reader.onerror = reject;
-        // Read first 1MB for quick hash
-        const blob = file.slice(0, Math.min(file.size, 1024 * 1024));
-        reader.readAsArrayBuffer(blob);
+        const firstChunk = file.slice(0, Math.min(chunkSize, file.size));
+        reader.readAsArrayBuffer(firstChunk);
       });
     }
 
@@ -579,11 +750,25 @@
       }
     }
 
+    async function deleteFolder(id) {
+      if (!confirm('确定要删除此文件夹及其所有内容吗？')) return;
+      const result = await API.deleteFolder(id);
+      if (result.code === 200) {
+        selectedFiles.delete(id);
+        loadFiles();
+      } else {
+        alert(result.message || '删除失败');
+      }
+    }
+
     // ==================== Selection ====================
     function toggleSelect(id) {
       if (selectedFiles.has(id)) selectedFiles.delete(id);
       else selectedFiles.add(id);
-      loadFiles();  // re-render to update styles
+      const tr = document.querySelector(`#fileBody tr[data-id="${id}"]`);
+      if (tr) tr.classList.toggle('selected');
+      const cb = tr?.querySelector('input[type="checkbox"]');
+      if (cb) cb.checked = selectedFiles.has(id);
     }
 
     function toggleAll() {
@@ -645,9 +830,91 @@
       if (currentType) params.type = currentType;
       API.getFiles(params).then(r => {
         if (r.code === 200) {
-          renderFiles(r.data.list);
+          renderFiles(r.data.list, r.data.folders);
           renderPagination();
           window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      });
+    }
+
+    // ==================== Folder Analysis ====================
+    async function showFolderAnalysis(folderId) {
+      document.getElementById('analysisBody').innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>分析中...</div>';
+      document.getElementById('analysisModal').classList.add('show');
+
+      const result = await API.getFolderAnalysis(folderId);
+      if (result.code !== 200) {
+        document.getElementById('analysisBody').innerHTML = '<div class="text-center py-4 text-danger">加载失败</div>';
+        return;
+      }
+
+      const d = result.data;
+      let html = `
+        <div class="mb-4">
+          <h5><i class="fas fa-folder me-2" style="color:#ffc107;"></i>${escapeHtml(d.folder_name)}</h5>
+          <div class="d-flex gap-4 mt-2">
+            <span style="font-size:14px;color:#666;"><strong>${d.total_files}</strong> 个文件</span>
+            <span style="font-size:14px;color:#666;">总计 <strong>${formatSize(d.total_size)}</strong></span>
+          </div>
+        </div>`;
+
+      // 子文件夹统计
+      if (d.subfolder_stats && d.subfolder_stats.length > 0) {
+        html += `<div class="mb-4">
+          <h6 class="mb-2"><i class="fas fa-folder-open me-1"></i>子文件夹分布</h6>
+          <div class="table-responsive"><table class="data-table"><thead><tr><th>文件夹</th><th>文件数</th><th>大小</th></tr></thead><tbody>`;
+        d.subfolder_stats.forEach(s => {
+          const pct = d.total_size > 0 ? ((s.total_size / d.total_size) * 100).toFixed(1) : 0;
+          html += `<tr>
+            <td><i class="fas fa-folder me-1" style="color:#ffc107;"></i>${escapeHtml(s.name)}</td>
+            <td>${s.file_count}</td>
+            <td>${formatSize(s.total_size)} <span style="color:#999;font-size:12px;">(${pct}%)</span></td>
+          </tr>`;
+        });
+        html += `</tbody></table></div></div>`;
+      }
+
+      // 文件类型分布
+      html += `<h6 class="mb-2"><i class="fas fa-chart-pie me-1"></i>文件类型分布</h6>`;
+      if (d.type_stats && d.type_stats.length > 0) {
+        html += `<div class="table-responsive"><table class="data-table"><thead><tr><th>类型</th><th>数量</th><th>大小</th><th>占比</th></tr></thead><tbody>`;
+        d.type_stats.forEach(t => {
+          const pct = d.total_size > 0 ? ((t.total_size / d.total_size) * 100).toFixed(1) : 0;
+          html += `<tr>
+            <td>.${t.extension || '未知'}</td>
+            <td>${t.count}</td>
+            <td>${formatSize(t.total_size)}</td>
+            <td><div class="d-flex align-items-center gap-2">
+              <div class="progress" style="width:80px;height:6px;"><div class="progress-bar" style="width:${pct}%;"></div></div>
+              <span style="font-size:12px;color:#999;">${pct}%</span>
+            </div></td>
+          </tr>`;
+        });
+        html += `</tbody></table></div>`;
+      } else {
+        html += '<p class="text-muted text-center py-3">暂无文件数据</p>';
+      }
+
+      document.getElementById('analysisBody').innerHTML = html;
+    }
+
+    // ==================== Storage Stats ====================
+    function showStorageModal() {
+      document.getElementById('storageModal').classList.add('show');
+      API.getStorageStats().then(r => {
+        if (r.code === 200) {
+          const d = r.data;
+          let html = '<h6 class="mb-3">文件类型分布</h6>';
+          if (d.type_stats && d.type_stats.length > 0) {
+            html += '<div class="table-responsive"><table class="data-table"><thead><tr><th>类型</th><th>数量</th><th>大小</th></tr></thead><tbody>';
+            d.type_stats.forEach(t => {
+              html += `<tr><td>.${t.extension || '未知'}</td><td>${t.count}</td><td>${formatSize(t.total_size)}</td></tr>`;
+            });
+            html += '</tbody></table></div>';
+          } else {
+            html += '<p class="text-muted text-center py-3">暂无数据</p>';
+          }
+          document.getElementById('typeStats').innerHTML = html;
         }
       });
     }

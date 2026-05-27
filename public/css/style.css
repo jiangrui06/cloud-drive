@@ -206,6 +206,9 @@ select.form-control { appearance: auto; }
 .menu-item i { width: 18px; text-align: center; font-size: 15px; }
 .menu-item .badge { margin-left: auto; background: var(--danger); color: #fff; font-size: 11px; padding: 1px 8px; border-radius: 10px; }
 
+.menu-sub { padding-left: 52px !important; font-size: 13px !important; }
+.menu-sub i { width: 16px !important; font-size: 13px !important; }
+
 .sidebar-footer {
   padding: 16px 20px;
   border-top: 1px solid rgba(255,255,255,.1);
@@ -438,6 +441,8 @@ select.form-control { appearance: auto; }
 .modal-overlay.show { display: flex; }
 
 .modal {
+  position: relative;
+  display: block;
   background: #fff;
   border-radius: 12px;
   width: 90%;

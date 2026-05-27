@@ -95,6 +95,7 @@
   </div>
 
   <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
   <script>
     // 标签切换
     document.querySelectorAll('.login-tab').forEach(tab => {
@@ -159,7 +160,7 @@
             this.disabled = false;
           }
         }, 1000);
-        alert('验证码已发送（演示环境验证码: 123456）');
+        alert('验证码已发送（请在服务器控制台查看验证码）');
       }
     });
 

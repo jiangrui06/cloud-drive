@@ -50,17 +50,25 @@ router.post('/register', async (req, res) => {
     // 加密密码
     const hashedPassword = await bcrypt.hash(password, config.encryption.bcryptRounds);
 
-    // 创建用户
-    const userId = await db.insert(
-      'INSERT INTO users (username, password, email, phone, nickname) VALUES (?, ?, ?, ?, ?)',
-      [username, hashedPassword, email || null, phone || null, nickname || username]
-    );
+    // 使用事务：创建用户 + 创建根目录
+    const conn = await db.beginTransaction();
+    let userId;
+    try {
+      userId = await db.insertWithConn(conn,
+        'INSERT INTO users (username, password, email, phone, nickname) VALUES (?, ?, ?, ?, ?)',
+        [username, hashedPassword, email || null, phone || null, nickname || username]
+      );
 
-    // 为用户创建根目录
-    await db.insert(
-      'INSERT INTO folders (name, parent_id, owner_id) VALUES (?, NULL, ?)',
-      ['我的文件', userId]
-    );
+      await db.insertWithConn(conn,
+        'INSERT INTO folders (name, parent_id, owner_id) VALUES (?, NULL, ?)',
+        ['我的文件', userId]
+      );
+
+      await conn.commit();
+    } catch (txErr) {
+      await conn.rollback();
+      throw txErr; // 交给外层 catch 处理
+    }
 
     // 记录注册日志
     await db.insert(
@@ -95,22 +103,20 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ code: 400, message: '账号和密码不能为空' });
     }
 
-    // 根据输入自动判断登录方式
-    let method = loginMethod || 'password';
     let user = null;
+    let method = loginMethod;
 
-    if (method === 'email' || (account.includes('@') && !method)) {
-      user = await db.queryOne('SELECT * FROM users WHERE email = ? AND status = 1', [account]);
-      method = 'email';
-    } else if (method === 'phone' || (!method)) {
-      user = await db.queryOne('SELECT * FROM users WHERE phone = ? AND status = 1', [account]);
-      if (user) method = 'phone';
+    // 自动检测登录方式
+    if (!method) {
+      method = account.includes('@') ? 'email' : 'password';
     }
 
-    if (!user) {
-      // 默认用户名登录
+    if (method === 'email') {
+      user = await db.queryOne('SELECT * FROM users WHERE email = ? AND status = 1', [account]);
+    } else if (method === 'phone') {
+      user = await db.queryOne('SELECT * FROM users WHERE phone = ? AND status = 1', [account]);
+    } else {
       user = await db.queryOne('SELECT * FROM users WHERE username = ? AND status = 1', [account]);
-      method = 'password';
     }
 
     if (!user) {
@@ -183,18 +189,35 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// 验证码存储（内存） - 生产环境应使用 Redis
+const captchaStore = new Map();
+
+// 生成随机验证码
+function generateCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
 // --------------- 邮箱验证码登录 ---------------
 router.post('/login/email', async (req, res) => {
   try {
+    if (!config.captcha.enabled) {
+      return res.status(400).json({ code: 400, message: '邮箱验证码登录未启用' });
+    }
     const { email, code } = req.body;
     if (!email || !code) {
       return res.status(400).json({ code: 400, message: '邮箱和验证码不能为空' });
     }
 
-    // 实际项目中这里需要验证验证码，当前为演示简化
-    if (code !== '123456') {
-      return res.status(400).json({ code: 400, message: '验证码错误' });
+    // 验证验证码
+    const stored = captchaStore.get(email);
+    if (!stored || stored.code !== code) {
+      return res.status(400).json({ code: 400, message: '验证码错误或已过期' });
     }
+    if (Date.now() > stored.expireAt) {
+      captchaStore.delete(email);
+      return res.status(400).json({ code: 400, message: '验证码已过期，请重新发送' });
+    }
+    captchaStore.delete(email); // 验证码一次性使用
 
     const user = await db.queryOne('SELECT * FROM users WHERE email = ? AND status = 1', [email]);
     if (!user) {
@@ -289,18 +312,22 @@ router.put('/password', authenticate, async (req, res) => {
   }
 });
 
-// --------------- 发送验证码（模拟） ---------------
+// --------------- 发送验证码 ---------------
 router.post('/send-code', async (req, res) => {
   try {
+    if (!config.captcha.enabled) {
+      return res.status(400).json({ code: 400, message: '验证码功能未启用' });
+    }
     const { email, phone } = req.body;
     if (!email && !phone) {
       return res.status(400).json({ code: 400, message: '邮箱或手机号不能为空' });
     }
 
-    // 实际项目中这里调用邮件/短信服务
-    // 演示环境直接返回验证码
-    const code = '123456';
-    console.log(`[Captcha] 验证码已发送到 ${email || phone}: ${code}`);
+    // 生成验证码并存储（演示环境在控制台打印）
+    const code = generateCode();
+    const identifier = email || phone;
+    captchaStore.set(identifier, { code, expireAt: Date.now() + (config.captcha.expireIn || 300) * 1000 });
+    console.log(`[Captcha] 验证码已发送到 ${identifier}: ${code}`);
 
     res.json({ code: 200, message: '验证码已发送', data: { expire_in: 300 } });
   } catch (err) {

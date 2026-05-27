@@ -5,6 +5,8 @@
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
 const config = require('./config');
@@ -13,13 +15,30 @@ const db = require('./models/db');
 const app = express();
 
 // ============================================================
-// 中间件
+// 安全中间件
 // ============================================================
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({
-  origin: '*',
+  origin: process.env.NODE_ENV === 'production' ? process.env.CORS_ORIGIN || false : '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  maxAge: 86400
 }));
+
+// 全局频率限制
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { code: 429, message: '请求过于频繁，请稍后再试' }
+});
+app.use(globalLimiter);
+
+// ============================================================
+// 常规中间件
+// ============================================================
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(morgan('[:date[iso]] :method :url :status :res[content-length] - :response-time ms'));
@@ -30,7 +49,19 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 // ============================================================
 // API 路由
 // ============================================================
+
+// 认证路由（带登录频率限制）
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { code: 429, message: '登录尝试过于频繁，请15分钟后再试' }
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
 app.use('/api/auth', require('./routes/auth'));
+
 app.use('/api/users', require('./routes/users'));
 app.use('/api/groups', require('./routes/groups'));
 app.use('/api/files', require('./routes/files'));
@@ -94,8 +125,8 @@ app.get('/s/:code', async (req, res) => {
         <div class="container">
           <div class="share-card">
             <div class="file-icon"><i class="fas fa-file"></i></div>
-            <div class="file-name">${link.name}</div>
-            <div class="file-info">${(link.size / 1024 / 1024).toFixed(2)} MB · ${link.extension || '未知类型'}</div>
+            <div class="file-name">${escapeHtml(link.name)}</div>
+            <div class="file-info">${(link.size / 1024 / 1024).toFixed(2)} MB · ${escapeHtml(link.extension || '未知类型')}</div>
             <a href="/api/public/download/${link.code}" class="btn btn-primary btn-lg w-100">
               <i class="fas fa-download me-2"></i>下载文件
             </a>
@@ -164,10 +195,18 @@ app.use((err, req, res, next) => {
 });
 
 // ============================================================
+// HTML转义函数
+// ============================================================
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ============================================================
 // 启动服务器
 // ============================================================
 const PORT = config.port;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log('============================================');
   console.log('  企业网盘管理系统 v1.0.0');
   console.log('  Cloud Drive Management System');
@@ -179,6 +218,29 @@ app.listen(PORT, () => {
   console.log('============================================');
   console.log(`  启动时间: ${new Date().toLocaleString('zh-CN')}`);
   console.log('============================================');
+  if (process.send) process.send('ready');
 });
+
+function gracefulShutdown(signal) {
+  console.log(`\n[Server] 收到 ${signal}，开始优雅关闭...`);
+  server.close(async () => {
+    try {
+      await db.pool.end();
+      console.log('[Server] 数据库连接已关闭');
+    } catch (err) {
+      console.error('[Server] 关闭数据库连接失败:', err.message);
+    }
+    console.log('[Server] 服务已停止');
+    process.exit(0);
+  });
+  // 30秒超时强制退出
+  setTimeout(() => {
+    console.error('[Server] 强制关闭超时');
+    process.exit(1);
+  }, 30000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 module.exports = app;

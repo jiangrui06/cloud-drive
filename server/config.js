@@ -22,7 +22,8 @@ module.exports = {
 
   // JWT配置
   jwt: {
-    secret: process.env.JWT_SECRET || 'cloud-drive-jwt-secret-key-2024',
+    // 生产环境请务必设置环境变量 JWT_SECRET，使用一个足够长且随机的字符串
+    secret: process.env.JWT_SECRET || 'cdms-jwt-secret-k8x9m2p4v7',
     expiresIn: '7d',
     refreshExpiresIn: '30d'
   },
@@ -32,7 +33,11 @@ module.exports = {
     root: path.join(__dirname, '..', 'storage'),
     maxFileSize: 100 * 1024 * 1024, // 100MB
     allowedExtensions: 'jpg,jpeg,png,gif,bmp,doc,docx,xls,xlsx,ppt,pptx,pdf,txt,zip,rar,7z,mp4,mp3,avi,wav,js,py,html,css,json,xml,md,csv',
-    chunkSize: 1024 * 1024 // 分片上传: 1MB/片
+    chunkSize: 1024 * 1024, // 分片上传: 1MB/片
+    defaultStoragePerUser: parseInt(process.env.DEFAULT_STORAGE) || 109951162777600, // 用户默认存储空间(字节)，默认100TB，可环境变量 DEFAULT_STORAGE 覆盖
+    // 向后兼容
+    get defaultFileSize() { return this.defaultStoragePerUser; },
+    set defaultFileSize(v) { this.defaultStoragePerUser = v; }
   },
 
   // 加密配置

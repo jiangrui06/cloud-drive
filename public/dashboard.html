@@ -19,8 +19,8 @@
       <nav class="sidebar-menu">
         <div class="menu-item active" onclick="location.href='/dashboard.html'"><i class="fas fa-home"></i>工作台</div>
         <div class="menu-item" onclick="location.href='/file-manager.html'"><i class="fas fa-folder"></i>我的文件</div>
-        <div class="menu-item" onclick="location.href='/file-manager.html?type=recent'"><i class="fas fa-clock"></i>最近文件</div>
-        <div class="menu-item" onclick="location.href='/file-manager.html?type=shared'"><i class="fas fa-share-alt"></i>共享文件</div>
+        <div class="menu-item menu-sub" onclick="location.href='/file-manager.html?type=recent'"><i class="fas fa-clock"></i>最近文件</div>
+        <div class="menu-item menu-sub" onclick="location.href='/file-manager.html?type=shared'"><i class="fas fa-share-alt"></i>共享文件</div>
         <div class="menu-item" id="menuGroups" onclick="location.href='/admin/groups.html'"><i class="fas fa-users"></i>我的群组</div>
         <div class="menu-divider" style="border-top:1px solid rgba(255,255,255,.1); margin:8px 16px;"></div>
         <div class="menu-item" id="menuUsers" onclick="location.href='/admin/users.html'" style="display:none;">
@@ -203,7 +203,7 @@
             <td>
               <div class="file-name-cell" onclick="API.downloadFile(${f.id})">
                 <span class="file-icon ${iconClass}"><i class="fas ${icon}"></i></span>
-                <span class="name">${f.name}</span>
+                <span class="name">${escapeHtml(f.name)}</span>
               </div>
             </td>
             <td>${formatSize(f.size)}</td>

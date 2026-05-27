@@ -95,13 +95,25 @@ router.post('/', authenticate, requireAdmin, logOperation('create_user'), async 
     }
 
     const hashedPassword = await bcrypt.hash(password, config.encryption.bcryptRounds);
-    const userId = await db.insert(
-      'INSERT INTO users (username, password, email, phone, nickname, role, total_storage) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [username, hashedPassword, email || null, phone || null, nickname || username, role || 'user', total_storage || config.storage.defaultFileSize]
-    );
 
-    // 创建根目录
-    await db.insert('INSERT INTO folders (name, parent_id, owner_id) VALUES (?, NULL, ?)', ['我的文件', userId]);
+    // 使用事务：创建用户 + 创建根目录
+    const conn = await db.beginTransaction();
+    let userId;
+    try {
+      userId = await db.insertWithConn(conn,
+        'INSERT INTO users (username, password, email, phone, nickname, role, total_storage) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [username, hashedPassword, email || null, phone || null, nickname || username, role || 'user', total_storage || config.storage.defaultFileSize]
+      );
+
+      await db.insertWithConn(conn,
+        'INSERT INTO folders (name, parent_id, owner_id) VALUES (?, NULL, ?)', ['我的文件', userId]
+      );
+
+      await conn.commit();
+    } catch (txErr) {
+      await conn.rollback();
+      throw txErr;
+    }
 
     res.status(201).json({ code: 201, message: '用户创建成功', data: { id: userId } });
   } catch (err) {

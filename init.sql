@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `nickname`    VARCHAR(50)     DEFAULT NULL            COMMENT '昵称',
   `role`        ENUM('admin','user') NOT NULL DEFAULT 'user' COMMENT '角色: admin管理员, user普通用户',
   `status`      TINYINT(1)      NOT NULL DEFAULT 1      COMMENT '状态: 1启用, 0禁用',
-  `total_storage` BIGINT UNSIGNED NOT NULL DEFAULT 1073741824 COMMENT '总存储空间(字节), 默认1GB',
+  `total_storage` BIGINT UNSIGNED NOT NULL DEFAULT 109951162777600 COMMENT '总存储空间(字节), 默认100TB',
   `used_storage`  BIGINT UNSIGNED NOT NULL DEFAULT 0    COMMENT '已用存储空间(字节)',
   `last_login`  DATETIME        DEFAULT NULL            COMMENT '最后登录时间',
   `login_ip`    VARCHAR(45)     DEFAULT NULL            COMMENT '最后登录IP',
@@ -225,13 +225,13 @@ CREATE TABLE IF NOT EXISTS `system_config` (
 
 -- 默认管理员: admin / admin123456 (请在生产环境修改密码)
 INSERT INTO `users` (`username`, `password`, `email`, `phone`, `nickname`, `role`, `status`) VALUES
-('admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'admin@clouddrive.com', '13800000000', '系统管理员', 'admin', 1);
+('admin', '$2a$10$BGQgm909SaEgraAPGsuL1uXnLAERTcmG1D/8HtvmMBFfdS.l2pTDO', 'admin@clouddrive.com', '13800000000', '系统管理员', 'admin', 1);
 
 -- 默认系统配置
 INSERT INTO `system_config` (`config_key`, `config_value`, `description`) VALUES
 ('max_file_size', '104857600', '单文件最大上传大小(字节)，默认100MB'),
 ('allowed_extensions', 'jpg,jpeg,png,gif,bmp,doc,docx,xls,xlsx,ppt,pptx,pdf,txt,zip,rar,7z,mp4,mp3,avi,wav', '允许上传的文件扩展名'),
-('default_storage_per_user', '1073741824', '用户默认存储空间(字节)，默认1GB'),
+('default_storage_per_user', '109951162777600', '用户默认存储空间(字节)，默认100TB'),
 ('site_name', '企业云盘', '站点名称'),
 ('maintenance_mode', '0', '维护模式: 1开启, 0关闭');
 

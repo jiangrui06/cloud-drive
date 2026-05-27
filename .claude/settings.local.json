@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node *)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :3000)",
+      "Bash(kill 40492)",
+      "Bash(findstr \":3000\")",
+      "Bash(taskkill /F /PID 40492)",
+      "Bash(taskkill //F //PID 40492)",
+      "Bash(curl -s http://localhost:3000/)",
+      "Bash(curl *)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Folders:', [f['name'] for f in d['data']['folders']]\\)\")",
+      "Bash(npm install *)",
+      "Bash(taskkill *)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Files in folder 2:', len\\(d['data']['list']\\), 'items'\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(python *)",
+      "Bash(pm2 --version)",
+      "Bash(pm2 start *)",
+      "Bash(pm2 startup *)",
+      "Bash(pm2 save *)",
+      "Bash(pm2 list *)",
+      "Bash(pm2 show *)"
+    ]
+  }
+}
