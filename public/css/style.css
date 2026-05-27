@@ -717,3 +717,45 @@ select.form-control { appearance: auto; }
 @media (max-width: 768px) {
   .sidebar-toggle { display: flex; align-items: center; justify-content: center; }
 }
+
+/* ===================== Batch Bar ===================== */
+.batch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
+  border-radius: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.batch-bar .batch-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ===================== Folder Tree ===================== */
+.folder-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: background .2s;
+}
+
+.folder-tree-item:hover { background: #f0f8ff; }
+.folder-tree-item.selected { background: #e6f7ff; color: var(--primary); font-weight: 500; }
+.folder-tree-item i { color: #ffc107; width: 16px; }
+.folder-tree-item .tree-toggle { width: 16px; cursor: pointer; color: var(--text-muted); font-size: 11px; }
+.folder-tree-children { padding-left: 20px; }
+
+/* ===================== Preview ===================== */
+.preview-img { max-width: 100%; max-height: 65vh; border-radius: 8px; }
+.preview-video { max-width: 100%; max-height: 65vh; border-radius: 8px; }
+.preview-audio { width: 100%; margin-top: 20px; }

@@ -57,6 +57,41 @@ const Auth = {
   }
 };
 
+// ============================================================
+// Toast 通知工具
+// ============================================================
+const Toast = {
+  _container: null,
+
+  _ensureContainer() {
+    if (!this._container) {
+      this._container = document.createElement('div');
+      this._container.className = 'toast-container';
+      document.body.appendChild(this._container);
+    }
+    return this._container;
+  },
+
+  show(message, type = 'info', duration = 3000) {
+    const container = this._ensureContainer();
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.innerHTML = message;
+    container.appendChild(el);
+
+    setTimeout(() => {
+      el.style.opacity = '0';
+      el.style.transition = 'opacity .3s';
+      setTimeout(() => el.remove(), 300);
+    }, duration);
+  },
+
+  success(msg, duration) { this.show(msg, 'success', duration); },
+  error(msg, duration) { this.show(msg, 'error', duration); },
+  warning(msg, duration) { this.show(msg, 'warning', duration); },
+  info(msg, duration) { this.show(msg, 'info', duration); }
+};
+
 // 页面加载时更新用户信息
 async function loadUserInfo() {
   if (!localStorage.getItem('token')) return;

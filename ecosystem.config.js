@@ -8,9 +8,11 @@ module.exports = {
     env: {
       NODE_ENV: 'production',
       PORT: 3000,
+      CORS_ORIGIN: '*',
     },
     env_production: {
       NODE_ENV: 'production',
+      CORS_ORIGIN: '*',
     },
     // 日志配置
     error_file: './logs/err.log',

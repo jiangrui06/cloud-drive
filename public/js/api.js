@@ -134,6 +134,20 @@ const API = {
   deleteUser(id) { return this.del(`/users/${id}`); },
   getLogs(params) { return this.get('/users/logs/operations?' + new URLSearchParams(params || {})); },
 
+  // ==================== 回收站接口 ====================
+  getTrashFiles(params) { return this.get('/files/trash?' + new URLSearchParams(params || {})); },
+  restoreTrashFile(id) { return this.post(`/files/trash/restore/${id}`); },
+  restoreAllTrash() { return this.post('/files/trash/restore-all'); },
+  deleteTrashFile(id) { return this.del(`/files/trash/${id}`); },
+  emptyTrash() { return this.del('/files/trash/empty'); },
+
+  // ==================== 版本历史接口 ====================
+  getFileVersions(id) { return this.get(`/files/versions/${id}`); },
+  rollbackVersion(id, version) { return this.post(`/files/versions/rollback/${id}`, { version }); },
+
+  // ==================== 文件夹分享接口 ====================
+  shareFolder(id, data) { return this.post(`/files/share-folder/${id}`, data); },
+
   // ==================== 群组接口 ====================
   getGroups(params) { return this.get('/groups?' + new URLSearchParams(params || {})); },
   getGroup(id) { return this.get(`/groups/${id}`); },

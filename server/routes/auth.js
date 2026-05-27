@@ -4,6 +4,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const router = express.Router();
 const db = require('../models/db');
 const config = require('../config');
@@ -332,6 +333,81 @@ router.post('/send-code', async (req, res) => {
     res.json({ code: 200, message: '验证码已发送', data: { expire_in: 300 } });
   } catch (err) {
     res.status(500).json({ code: 500, message: '发送失败' });
+  }
+});
+
+// --------------- 忘记密码（生成重置令牌） ---------------
+const resetTokenStore = new Map();
+
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ code: 400, message: '请输入邮箱地址' });
+    }
+
+    // 检查邮箱是否注册
+    const user = await db.queryOne('SELECT id, username FROM users WHERE email = ?', [email]);
+    if (!user) {
+      // 不暴露邮箱是否存在，统一返回成功
+      return res.json({ code: 200, message: '如果该邮箱已注册，重置密码链接已发送（请在服务器控制台查看）' });
+    }
+
+    // 生成重置令牌
+    const token = crypto.randomBytes(20).toString('hex');
+    resetTokenStore.set(token, {
+      userId: user.id,
+      email,
+      expireAt: Date.now() + 3600000 // 1小时有效
+    });
+
+    const resetUrl = `${req.protocol}://${req.hostname}:${config.port}/reset-password.html?token=${token}`;
+    console.log('');
+    console.log('============================================');
+    console.log(`  密码重置请求`);
+    console.log(`  用户: ${user.username} (${email})`);
+    console.log(`  重置链接: ${resetUrl}`);
+    console.log('============================================');
+    console.log('');
+
+    res.json({ code: 200, message: '如果该邮箱已注册，重置密码链接已发送（请在服务器控制台查看）' });
+  } catch (err) {
+    console.error('[Auth] 忘记密码处理失败:', err);
+    res.status(500).json({ code: 500, message: '服务器内部错误' });
+  }
+});
+
+// --------------- 重置密码 ---------------
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) {
+      return res.status(400).json({ code: 400, message: '令牌和新密码不能为空' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ code: 400, message: '密码长度不能少于6位' });
+    }
+
+    const record = resetTokenStore.get(token);
+    if (!record) {
+      return res.status(400).json({ code: 400, message: '重置令牌无效或已过期' });
+    }
+    if (Date.now() > record.expireAt) {
+      resetTokenStore.delete(token);
+      return res.status(400).json({ code: 400, message: '重置令牌已过期，请重新申请' });
+    }
+
+    // 更新密码
+    const hashedPassword = await bcrypt.hash(password, config.encryption.bcryptRounds);
+    await db.update('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, record.userId]);
+
+    resetTokenStore.delete(token);
+
+    console.log(`[Auth] 用户 ${record.userId} 密码已重置成功`);
+    res.json({ code: 200, message: '密码重置成功，请使用新密码登录' });
+  } catch (err) {
+    console.error('[Auth] 重置密码失败:', err);
+    res.status(500).json({ code: 500, message: '服务器内部错误' });
   }
 });
 

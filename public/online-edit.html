@@ -6,7 +6,21 @@
   <title>在线编辑 - 企业云盘</title>
   <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.1/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/monokai.min.css">
   <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .editor-content .CodeMirror {
+      flex: 1;
+      height: auto;
+      min-height: calc(100vh - 120px);
+      font-size: 14px;
+      font-family: 'Monaco', 'Menlo', 'Consolas', 'Courier New', monospace;
+      line-height: 1.6;
+    }
+    .editor-content { flex: 1; display: flex; flex-direction: column; }
+    .CodeMirror-gutters { border-right: 1px solid #e8e8e8; }
+  </style>
 </head>
 <body>
   <div class="editor-container">
@@ -20,6 +34,9 @@
         <span id="editorFileInfo" class="text-muted ms-2" style="font-size:13px;"></span>
       </div>
       <div>
+        <button class="btn btn-outline btn-sm me-2" onclick="showVersionHistory()" id="versionBtn" style="display:none;">
+          <i class="fas fa-history me-1"></i>版本历史
+        </button>
         <button class="btn btn-outline btn-sm me-2" onclick="saveFile()" id="saveBtn">
           <i class="fas fa-save me-1"></i>保存
         </button>
@@ -41,6 +58,32 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="versionModal">
+    <div class="modal" style="max-width:600px;">
+      <div class="modal-header">
+        <h4><i class="fas fa-history me-2"></i>版本历史</h4>
+        <button class="btn btn-sm btn-outline" onclick="closeModal('versionModal')">&times;</button>
+      </div>
+      <div class="modal-body" id="versionBody">
+        <div class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>加载中...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/sql/sql.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/ruby/ruby.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/php/php.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/go/go.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/rust/rust.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/shell/shell.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/yaml/yaml.min.js"></script>
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script>
@@ -51,8 +94,6 @@
     const fileId = params.get('id');
     if (!fileId) {
       document.getElementById('editorFileName').textContent = '未指定文件';
-      document.getElementById('editorArea').disabled = true;
-      document.getElementById('saveBtn').disabled = true;
     } else {
       loadFile(fileId);
     }
@@ -60,12 +101,37 @@
     let currentFile = null;
     let hasChanges = false;
     let saveTimeout = null;
+    let editor = null;
+
+    const extModeMap = {
+      'js': 'javascript', 'mjs': 'javascript', 'cjs': 'javascript',
+      'jsx': 'javascript', 'ts': 'javascript', 'tsx': 'javascript',
+      'py': 'python', 'pyw': 'python',
+      'html': 'htmlmixed', 'htm': 'htmlmixed',
+      'css': 'css', 'scss': 'css', 'less': 'css',
+      'xml': 'xml', 'svg': 'xml', 'xsl': 'xml',
+      'json': 'javascript',
+      'java': 'text/x-java', 'cpp': 'text/x-c++src', 'c': 'text/x-csrc',
+      'h': 'text/x-csrc', 'hpp': 'text/x-c++src',
+      'go': 'go', 'rs': 'rust',
+      'rb': 'ruby', 'php': 'php',
+      'sql': 'sql', 'pl': 'sql',
+      'sh': 'shell', 'bash': 'shell', 'zsh': 'shell',
+      'yaml': 'yaml', 'yml': 'yaml',
+      'md': 'markdown', 'markdown': 'markdown',
+      'ini': 'shell', 'cfg': 'shell', 'conf': 'shell',
+      'bat': 'shell', 'ps1': 'shell',
+      'txt': null, 'log': null, 'csv': null
+    };
+
+    function getEditorMode(ext) {
+      return extModeMap[ext] || null;
+    }
 
     async function loadFile(id) {
       const result = await API.previewFile(id);
       if (result.code !== 200 || result.data.type !== 'text') {
         document.getElementById('editorFileName').textContent = result.message || '无法加载文件';
-        document.getElementById('editorArea').disabled = true;
         document.getElementById('saveBtn').disabled = true;
         return;
       }
@@ -73,39 +139,57 @@
       currentFile = result.data;
       document.getElementById('editorFileName').textContent = currentFile.name;
       document.getElementById('editorFileInfo').textContent = `${formatSize(currentFile.size)} · .${currentFile.extension}`;
-      document.getElementById('editorArea').value = currentFile.content;
       document.getElementById('statusMeta').textContent = `${countLines(currentFile.content)} 行 · .${currentFile.extension}`;
 
-      // Listen for changes
-      document.getElementById('editorArea').addEventListener('input', () => {
+      const mode = getEditorMode(currentFile.extension);
+      const textarea = document.getElementById('editorArea');
+
+      // Create CodeMirror instance
+      editor = CodeMirror.fromTextArea(textarea, {
+        value: currentFile.content,
+        mode: mode || 'text/plain',
+        theme: 'monokai',
+        lineNumbers: true,
+        indentUnit: 2,
+        tabSize: 2,
+        lineWrapping: false,
+        autofocus: true,
+        extraKeys: {
+          'Ctrl-S': function(cm) { saveFile(); },
+          'Cmd-S': function(cm) { saveFile(); }
+        }
+      });
+
+      editor.setValue(currentFile.content);
+      editor.on('change', () => {
         hasChanges = true;
         document.getElementById('statusInfo').textContent = '📝 未保存的更改';
         document.getElementById('saveBtn').className = 'btn btn-primary btn-sm';
-        // Auto-save after 3 seconds of no typing
         clearTimeout(saveTimeout);
         saveTimeout = setTimeout(autoSave, 3000);
       });
 
-      // Keyboard shortcut: Ctrl+S
-      document.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-          e.preventDefault();
-          saveFile();
-        }
-      });
+      // Show version history button
+      document.getElementById('versionBtn').style.display = '';
 
       document.getElementById('statusInfo').textContent = '就绪';
     }
 
     async function saveFile() {
       if (!currentFile || !hasChanges) return;
+      if (!editor) {
+        // fallback to textarea
+        const ta = document.getElementById('editorArea');
+        if (ta) currentFile.content = ta.value;
+      } else {
+        currentFile.content = editor.getValue();
+      }
+
       const btn = document.getElementById('saveBtn');
-      const originalText = btn.innerHTML;
       btn.disabled = true;
       btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>保存中...';
 
-      const content = document.getElementById('editorArea').value;
-      const result = await API.saveFile(fileId, content);
+      const result = await API.saveFile(fileId, currentFile.content);
 
       btn.disabled = false;
       if (result.code === 200) {
@@ -113,10 +197,10 @@
         document.getElementById('statusInfo').textContent = '✅ 已保存 (v' + (result.data.version || '?') + ')';
         document.getElementById('saveBtn').className = 'btn btn-outline btn-sm';
         document.getElementById('statusMeta').textContent =
-          `${countLines(content)} 行 · ${formatSize(result.data.size)} · v${result.data.version}`;
+          `${countLines(currentFile.content)} 行 · ${formatSize(result.data.size)} · v${result.data.version}`;
       } else {
         document.getElementById('statusInfo').textContent = '❌ 保存失败: ' + (result.message || '错误');
-        btn.innerHTML = originalText;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i>保存';
       }
     }
 
@@ -129,7 +213,65 @@
     }
 
     function countLines(text) {
+      if (!text) return 0;
       return text.split('\n').length;
+    }
+
+    // ==================== Version History ====================
+    async function showVersionHistory() {
+      if (!fileId) return;
+      document.getElementById('versionModal').classList.add('show');
+      document.getElementById('versionBody').innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>加载中...</div>';
+
+      const result = await API.getFileVersions(fileId);
+      if (result.code !== 200) {
+        document.getElementById('versionBody').innerHTML = '<div class="text-center py-4 text-danger">加载失败</div>';
+        return;
+      }
+
+      const { list: versions, current_version } = result.data;
+      if (!versions || versions.length === 0) {
+        document.getElementById('versionBody').innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-history me-2"></i>暂无版本历史</div>';
+        return;
+      }
+
+      let html = `<p style="font-size:13px;color:#666;margin-bottom:12px;">当前版本: v${current_version} · 共 ${versions.length} 个版本</p>`;
+      html += '<div class="table-responsive"><table class="data-table"><thead><tr><th>版本</th><th>大小</th><th>操作人</th><th>备注</th><th>时间</th><th>操作</th></tr></thead><tbody>';
+
+      versions.forEach(v => {
+        const isCurrent = v.version === current_version;
+        html += `<tr ${isCurrent ? 'style="background:#f6ffed;"' : ''}>
+          <td><strong>v${v.version}</strong>${isCurrent ? ' <span class="tag tag-active">当前</span>' : ''}</td>
+          <td>${formatSize(v.size)}</td>
+          <td>${escapeHtml(v.uploader_name || '-')}</td>
+          <td style="font-size:12px;color:#666;">${escapeHtml(v.change_note || '-')}</td>
+          <td style="font-size:12px;">${formatDate(v.created_at)}</td>
+          <td>${!isCurrent ? `<button class="btn btn-sm btn-outline" onclick="rollbackVersion(${v.version})"><i class="fas fa-undo me-1"></i>恢复</button>` : ''}</td>
+        </tr>`;
+      });
+
+      html += '</tbody></table></div>';
+      document.getElementById('versionBody').innerHTML = html;
+    }
+
+    async function rollbackVersion(version) {
+      if (!confirm(`确定要回滚到 v${version} 吗？当前内容将保存为新版本。`)) return;
+      const result = await API.rollbackVersion(fileId, version);
+      if (result.code === 200) {
+        Toast.success('回滚成功');
+        // Reload the editor content
+        if (editor) editor.toTextArea();
+        document.getElementById('editorArea').value = '';
+        document.getElementById('versionModal').classList.remove('show');
+        hasChanges = false;
+        loadFile(fileId);
+      } else {
+        Toast.error(result.message || '回滚失败');
+      }
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('show');
     }
 
     // Warn before leaving with unsaved changes

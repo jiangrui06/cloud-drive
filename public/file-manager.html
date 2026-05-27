@@ -22,6 +22,7 @@
         <div class="menu-item menu-sub" onclick="location.href='/file-manager.html?type=recent'" id="menuRecent"><i class="fas fa-clock"></i>最近文件</div>
         <div class="menu-item menu-sub" onclick="location.href='/file-manager.html?type=shared'" id="menuShared"><i class="fas fa-share-alt"></i>共享文件</div>
         <div class="menu-item" onclick="location.href='/admin/groups.html'"><i class="fas fa-users"></i>我的群组</div>
+        <div class="menu-item" onclick="openTrash()" id="menuTrash"><i class="fas fa-trash-alt"></i>回收站</div>
         <div class="menu-divider" style="border-top:1px solid rgba(255,255,255,.1); margin:8px 16px;"></div>
         <div class="menu-item" id="menuUsers2" onclick="location.href='/admin/users.html'" style="display:none;">
           <i class="fas fa-user-cog"></i>用户管理<span class="badge">Admin</span>
@@ -88,7 +89,7 @@
                   <th style="width:40px;"><input type="checkbox" id="selectAll" onchange="toggleAll()"></th>
                   <th>文件名</th>
                   <th style="width:100px;">大小</th>
-                  <th style="width:80px;" onclick="toggleSort()" style="cursor:pointer;">修改日期</th>
+                  <th style="width:80px;cursor:pointer;" onclick="toggleSort()">修改日期</th>
                   <th style="width:120px;">操作</th>
                 </tr>
               </thead>
@@ -101,6 +102,24 @@
 
         <!-- Pagination -->
         <div id="pagination" class="pagination" style="display:none;"></div>
+
+        <!-- Batch Action Bar -->
+        <div id="batchBar" class="batch-bar" style="display:none;">
+          <span id="batchCount" style="font-size:13px;color:#666;"></span>
+          <div class="batch-actions">
+            <button class="btn btn-danger btn-sm" onclick="batchDelete()"><i class="fas fa-trash me-1"></i>批量删除</button>
+            <button class="btn btn-outline btn-sm" onclick="clearSelection()"><i class="fas fa-times me-1"></i>取消选择</button>
+          </div>
+        </div>
+
+        <!-- Trash Actions Bar -->
+        <div id="trashBar" class="batch-bar" style="display:none;background:#fff3f0;border-color:#ffccc7;">
+          <span style="font-size:13px;color:#666;"><i class="fas fa-info-circle me-1"></i>回收站中的文件不会占用存储空间</span>
+          <div class="batch-actions">
+            <button class="btn btn-success btn-sm" onclick="restoreAllTrash()"><i class="fas fa-undo me-1"></i>恢复全部</button>
+            <button class="btn btn-danger btn-sm" onclick="emptyTrash()"><i class="fas fa-trash-alt me-1"></i>清空回收站</button>
+          </div>
+        </div>
       </div>
     </main>
   </div>
@@ -248,6 +267,54 @@
     <i class="fas fa-bars"></i>
   </button>
 
+  <!-- Move/Copy Modal -->
+  <div class="modal-overlay" id="moveCopyModal">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header">
+        <h4><i class="fas fa-folder-open me-2"></i><span id="moveCopyTitle">选择目标文件夹</span></h4>
+        <button class="btn btn-sm btn-outline" onclick="closeModal('moveCopyModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>目标文件夹</label>
+          <div id="folderTree" class="folder-tree" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;">
+            <div class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>加载中...</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('moveCopyModal')">取消</button>
+        <button class="btn btn-primary" id="moveCopyConfirmBtn" onclick="confirmMoveCopy()">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview Modal -->
+  <div class="modal-overlay" id="previewModal">
+    <div class="modal" style="max-width:700px;">
+      <div class="modal-header">
+        <h4><i class="fas fa-eye me-2"></i><span id="previewTitle">预览</span></h4>
+        <button class="btn btn-sm btn-outline" onclick="closeModal('previewModal')">&times;</button>
+      </div>
+      <div class="modal-body text-center" id="previewBody">
+        <div class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>加载中...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Version History Modal -->
+  <div class="modal-overlay" id="versionModal">
+    <div class="modal" style="max-width:600px;">
+      <div class="modal-header">
+        <h4><i class="fas fa-history me-2"></i>版本历史</h4>
+        <button class="btn btn-sm btn-outline" onclick="closeModal('versionModal')">&times;</button>
+      </div>
+      <div class="modal-body" id="versionBody">
+        <div class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>加载中...</div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.bootcdn.net/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
@@ -380,7 +447,9 @@
             <td>
               <div class="file-actions">
                 <button class="btn-icon" title="分析" onclick="event.stopPropagation();showFolderAnalysis(${f.id})"><i class="fas fa-chart-pie"></i></button>
+                <button class="btn-icon" title="分享" onclick="event.stopPropagation();showFolderShareModal(${f.id}, '${escapeHtml(f.name).replace(/'/g, "\\'")}')"><i class="fas fa-share-alt"></i></button>
                 <button class="btn-icon" title="下载" onclick="event.stopPropagation();API.downloadFolder(${f.id})"><i class="fas fa-download"></i></button>
+                <button class="btn-icon" title="移动" onclick="event.stopPropagation();showMoveCopyModal(${f.id}, 'move', 'folder')"><i class="fas fa-folder-open"></i></button>
                 <button class="btn-icon" title="重命名" onclick="event.stopPropagation();showRenameModal(${f.id}, '${escapeHtml(f.name).replace(/'/g, "\\'")}', 'folder')"><i class="fas fa-pen"></i></button>
                 <button class="btn-icon" title="删除" onclick="event.stopPropagation();deleteFolder(${f.id})" style="color:var(--danger);"><i class="fas fa-trash"></i></button>
               </div>
@@ -420,6 +489,9 @@
               ${canEdit ? `<button class="btn-icon" title="在线编辑" onclick="event.stopPropagation();editFile(${f.id})"><i class="fas fa-edit"></i></button>` : ''}
               <button class="btn-icon" title="下载" onclick="event.stopPropagation();API.downloadFile(${f.id})"><i class="fas fa-download"></i></button>
               <button class="btn-icon" title="分享" onclick="event.stopPropagation();showShareModal(${f.id})"><i class="fas fa-share-alt"></i></button>
+              <button class="btn-icon" title="移动" onclick="event.stopPropagation();showMoveCopyModal(${f.id}, 'move', 'file')"><i class="fas fa-folder-open"></i></button>
+              <button class="btn-icon" title="复制" onclick="event.stopPropagation();showMoveCopyModal(${f.id}, 'copy', 'file')"><i class="fas fa-copy"></i></button>
+              ${f.version > 1 ? `<button class="btn-icon" title="版本历史" onclick="event.stopPropagation();showVersionHistory(${f.id})"><i class="fas fa-history"></i></button>` : ''}
               <button class="btn-icon" title="重命名" onclick="event.stopPropagation();showRenameModal(${f.id}, '${escapeHtml(f.name).replace(/'/g, "\\'")}', 'file')"><i class="fas fa-pen"></i></button>
               <button class="btn-icon" title="删除" onclick="event.stopPropagation();deleteFile(${f.id})" style="color:var(--danger);"><i class="fas fa-trash"></i></button>
             </div>
@@ -897,6 +969,421 @@
 
       document.getElementById('analysisBody').innerHTML = html;
     }
+
+    // ==================== Trash Mode ====================
+    let trashMode = false;
+
+    function openTrash() {
+      trashMode = true;
+      pageMode = 'trash';
+      document.querySelector('.page-header h3').innerHTML = '<i class="fas fa-trash-alt me-2"></i>回收站';
+      document.getElementById('menuTrash').classList.add('active');
+      document.getElementById('menuRecent').classList.remove('active');
+      document.getElementById('menuShared').classList.remove('active');
+      document.getElementById('searchInput').parentElement.style.display = 'none';
+      document.getElementById('typeFilter').style.display = 'none';
+      document.getElementById('breadcrumb').innerHTML = '<a onclick="exitTrash()"><i class="fas fa-arrow-left me-1"></i>返回文件列表</a><span class="separator">/</span><span class="current">回收站</span>';
+      loadTrashFiles();
+    }
+
+    function exitTrash() {
+      trashMode = false;
+      pageMode = 'files';
+      document.querySelector('.page-header h3').innerHTML = '<i class="fas fa-folder me-2"></i>我的文件';
+      document.getElementById('menuTrash').classList.remove('active');
+      document.getElementById('searchInput').parentElement.style.display = '';
+      document.getElementById('typeFilter').style.display = '';
+      document.getElementById('trashBar').style.display = 'none';
+      currentFolder = null;
+      loadFiles(null);
+    }
+
+    async function loadTrashFiles() {
+      const result = await API.getTrashFiles({ page: 1, pageSize: 200 });
+      if (result.code === 200) {
+        renderTrashFiles(result.data.list);
+        document.getElementById('trashBar').style.display = 'flex';
+        document.getElementById('batchBar').style.display = 'none';
+      } else {
+        document.getElementById('fileBody').innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">加载失败</td></tr>';
+      }
+    }
+
+    function renderTrashFiles(files) {
+      const tbody = document.getElementById('fileBody');
+      if (!files || files.length === 0) {
+        tbody.innerHTML = `<tr>
+          <td colspan="5">
+            <div class="empty-state">
+              <i class="fas fa-trash-alt"></i>
+              <h4>回收站为空</h4>
+              <p>删除的文件会在这里显示，30天后自动清理</p>
+            </div>
+          </td>
+        </tr>`;
+        return;
+      }
+
+      tbody.innerHTML = files.map(f => {
+        const ext = (f.extension || '').replace('.', '');
+        const icon = getFileIcon(ext);
+        return `<tr>
+          <td><input type="checkbox" disabled></td>
+          <td>
+            <div class="file-name-cell">
+              <span class="file-icon"><i class="fas ${icon}"></i></span>
+              <span class="name" style="color:#999;text-decoration:line-through;">${escapeHtml(f.name)}</span>
+            </div>
+          </td>
+          <td>${formatSize(f.size)}</td>
+          <td style="font-size:12px;color:#999;">${formatDate(f.updated_at)}</td>
+          <td>
+            <div class="file-actions">
+              <button class="btn-icon" title="恢复" onclick="restoreFile(${f.id})" style="color:var(--success);"><i class="fas fa-undo"></i></button>
+              <button class="btn-icon" title="永久删除" onclick="permanentDelete(${f.id})" style="color:var(--danger);"><i class="fas fa-times"></i></button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function restoreFile(id) {
+      const result = await API.restoreTrashFile(id);
+      if (result.code === 200) {
+        loadTrashFiles();
+      } else {
+        alert(result.message || '恢复失败');
+      }
+    }
+
+    async function permanentDelete(id) {
+      if (!confirm('确定要永久删除此文件吗？此操作不可恢复！')) return;
+      const result = await API.deleteTrashFile(id);
+      if (result.code === 200) {
+        loadTrashFiles();
+      } else {
+        alert(result.message || '删除失败');
+      }
+    }
+
+    async function restoreAllTrash() {
+      if (!confirm('确定要恢复回收站中所有文件吗？')) return;
+      const result = await API.restoreAllTrash();
+      if (result.code === 200) {
+        alert(result.message);
+        loadTrashFiles();
+      } else {
+        alert(result.message || '操作失败');
+      }
+    }
+
+    async function emptyTrash() {
+      if (!confirm('确定要清空回收站吗？已删除的文件将被永久清除，不可恢复！')) return;
+      const result = await API.emptyTrash();
+      if (result.code === 200) {
+        alert(result.message);
+        loadTrashFiles();
+      } else {
+        alert(result.message || '操作失败');
+      }
+    }
+
+    // ==================== Batch Operations ====================
+    function updateBatchBar() {
+      const bar = document.getElementById('batchBar');
+      const count = selectedFiles.size;
+      if (count > 0 && !trashMode && pageMode === 'files') {
+        bar.style.display = 'flex';
+        document.getElementById('batchCount').textContent = `已选择 ${count} 项`;
+      } else {
+        bar.style.display = 'none';
+      }
+    }
+
+    function clearSelection() {
+      selectedFiles.clear();
+      document.querySelectorAll('#fileBody tr').forEach(tr => {
+        tr.classList.remove('selected');
+        const cb = tr.querySelector('input[type="checkbox"]');
+        if (cb) cb.checked = false;
+      });
+      document.getElementById('selectAll').checked = false;
+      updateBatchBar();
+    }
+
+    async function batchDelete() {
+      const ids = Array.from(selectedFiles);
+      if (ids.length === 0) return;
+      if (!confirm(`确定要删除选中的 ${ids.length} 个文件吗？`)) return;
+      const result = await API.batchDelete(ids);
+      if (result.code === 200) {
+        clearSelection();
+        loadFiles();
+      } else {
+        alert(result.message || '批量删除失败');
+      }
+    }
+
+    // Override toggleSelect to update batch bar
+    const origToggleSelect = toggleSelect;
+    toggleSelect = function(id) {
+      if (selectedFiles.has(id)) selectedFiles.delete(id);
+      else selectedFiles.add(id);
+      const tr = document.querySelector(`#fileBody tr[data-id="${id}"]`);
+      if (tr) tr.classList.toggle('selected');
+      const cb = tr?.querySelector('input[type="checkbox"]');
+      if (cb) cb.checked = selectedFiles.has(id);
+      updateBatchBar();
+    };
+
+    const origToggleAll = toggleAll;
+    toggleAll = function() {
+      const checked = document.getElementById('selectAll').checked;
+      document.querySelectorAll('#fileBody tr[data-id]').forEach(tr => {
+        const id = parseInt(tr.dataset.id);
+        if (checked) selectedFiles.add(id);
+        else selectedFiles.delete(id);
+      });
+      document.querySelectorAll('#fileBody input[type="checkbox"]').forEach(cb => cb.checked = checked);
+      document.querySelectorAll('#fileBody tr').forEach(tr => {
+        tr.classList.toggle('selected', checked);
+      });
+      updateBatchBar();
+    };
+
+    // ==================== Move/Copy ====================
+    let moveCopyTarget = null;
+    let moveCopyMode = 'move';
+
+    function showMoveCopyModal(id, mode, type) {
+      moveCopyTarget = { id, type: type || 'file' };
+      moveCopyMode = mode;
+      document.getElementById('moveCopyTitle').textContent = mode === 'move' ? '移动到...' : '复制到...';
+      document.getElementById('moveCopyConfirmBtn').textContent = mode === 'move' ? '移动到此处' : '复制到此处';
+      document.getElementById('moveCopyModal').classList.add('show');
+
+      loadFolderTree();
+    }
+
+    async function loadFolderTree() {
+      const container = document.getElementById('folderTree');
+      container.innerHTML = '<div class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>加载中...</div>';
+
+      const result = await API.getFolders();
+      if (result.code !== 200) {
+        container.innerHTML = '<div class="text-center text-danger py-3">加载失败</div>';
+        return;
+      }
+
+      const folders = result.data.list;
+      const tree = result.data.tree;
+
+      // Build folder tree HTML
+      function renderTree(nodes, depth) {
+        let html = '';
+        nodes.forEach(f => {
+          const hasChildren = f.children && f.children.length > 0;
+          const pad = depth * 20;
+          html += `<div class="folder-tree-item" data-id="${f.id}" onclick="selectFolderTreeItem(this, ${f.id})" style="padding-left:${pad + 8}px;">
+            ${hasChildren ? '<span class="tree-toggle" onclick="event.stopPropagation();toggleTreeChildren(this)"><i class="fas fa-chevron-down"></i></span>' : '<span class="tree-toggle" style="visibility:hidden;"><i class="fas fa-chevron-down"></i></span>'}
+            <i class="fas fa-folder"></i>
+            <span>${escapeHtml(f.name)}</span>
+          </div>`;
+          if (hasChildren) {
+            html += `<div class="folder-tree-children">${renderTree(f.children, depth + 1)}</div>`;
+          }
+        });
+        return html;
+      }
+
+      // Add "root" option
+      container.innerHTML = `
+        <div class="folder-tree-item selected" data-id="root" onclick="selectFolderTreeItem(this, null)">
+          <span class="tree-toggle" style="visibility:hidden;"><i class="fas fa-chevron-down"></i></span>
+          <i class="fas fa-home"></i>
+          <span>根目录</span>
+        </div>
+        ${renderTree(tree, 0)}
+      `;
+
+      window._selectedFolderId = null;
+    }
+
+    function selectFolderTreeItem(el, folderId) {
+      document.querySelectorAll('.folder-tree-item').forEach(i => i.classList.remove('selected'));
+      el.classList.add('selected');
+      window._selectedFolderId = folderId;
+    }
+
+    function toggleTreeChildren(el) {
+      const children = el.closest('.folder-tree-item').nextElementSibling;
+      if (children && children.classList.contains('folder-tree-children')) {
+        children.style.display = children.style.display === 'none' ? '' : 'none';
+        el.querySelector('i').className = children.style.display === 'none' ? 'fas fa-chevron-right' : 'fas fa-chevron-down';
+      }
+    }
+
+    async function confirmMoveCopy() {
+      const targetId = window._selectedFolderId;
+      if (!moveCopyTarget) return;
+
+      const btn = document.getElementById('moveCopyConfirmBtn');
+      btn.disabled = true;
+      btn.textContent = '处理中...';
+
+      let result;
+      if (moveCopyMode === 'move') {
+        result = await API.moveFile(moveCopyTarget.id, targetId, moveCopyTarget.type);
+      } else {
+        result = await API.copyFile(moveCopyTarget.id, targetId);
+      }
+
+      btn.disabled = false;
+      btn.textContent = moveCopyMode === 'move' ? '移动到此处' : '复制到此处';
+
+      if (result.code === 200) {
+        closeModal('moveCopyModal');
+        loadFiles();
+      } else {
+        alert(result.message || '操作失败');
+      }
+    }
+
+    // ==================== Preview ====================
+    async function showPreview(id, ext) {
+      const previewTypes = ['jpg','jpeg','png','gif','bmp','webp','svg','mp4','avi','mov','wmv','flv','mkv','mp3','wav','aac','flac'];
+      if (!previewTypes.includes(ext)) {
+        API.downloadFile(id);
+        return;
+      }
+
+      document.getElementById('previewModal').classList.add('show');
+      document.getElementById('previewBody').innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>加载中...</div>';
+
+      const token = encodeURIComponent(localStorage.getItem('token'));
+      const previewUrl = `/api/files/download/${id}?token=${token}`;
+
+      const imgExts = ['jpg','jpeg','png','gif','bmp','webp','svg'];
+      const videoExts = ['mp4','avi','mov','wmv','flv','mkv'];
+      const audioExts = ['mp3','wav','aac','flac'];
+
+      let html = '';
+      if (imgExts.includes(ext)) {
+        html = `<img src="${previewUrl}" class="preview-img" alt="preview" onerror="this.parentElement.innerHTML='<p class=text-danger><i class=\'fas fa-exclamation-circle me-2\'></i>图片加载失败</p>'">`;
+      } else if (videoExts.includes(ext)) {
+        html = `<video controls autoplay class="preview-video"><source src="${previewUrl}"></video>`;
+      } else if (audioExts.includes(ext)) {
+        html = `<div><i class="fas fa-music" style="font-size:48px;color:var(--primary);margin-bottom:16px;"></i><audio controls autoplay class="preview-audio"><source src="${previewUrl}"></audio></div>`;
+      }
+
+      document.getElementById('previewBody').innerHTML = html;
+    }
+
+    // Override openFile to use preview for images/video/audio
+    const origOpenFile = openFile;
+    openFile = function(id, ext, name) {
+      const textExts = ['txt','md','json','xml','html','css','js','py','sql','csv','yml','yaml','ini','cfg','log','sh','bat','java','cpp','c','h','go','rs','rb','php'];
+      const previewExts = ['jpg','jpeg','png','gif','bmp','webp','svg','mp4','avi','mov','wmv','flv','mkv','mp3','wav','aac','flac'];
+      if (textExts.includes(ext)) {
+        window.location.href = `/online-edit.html?id=${id}`;
+      } else if (previewExts.includes(ext)) {
+        showPreview(id, ext);
+      } else {
+        API.downloadFile(id);
+      }
+    };
+
+    // ==================== Version History ====================
+    async function showVersionHistory(fileId) {
+      document.getElementById('versionModal').classList.add('show');
+      document.getElementById('versionBody').innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>加载中...</div>';
+
+      const result = await API.getFileVersions(fileId);
+      if (result.code !== 200) {
+        document.getElementById('versionBody').innerHTML = '<div class="text-center py-4 text-danger">加载失败</div>';
+        return;
+      }
+
+      const { list: versions, current_version } = result.data;
+      if (!versions || versions.length === 0) {
+        document.getElementById('versionBody').innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-history me-2"></i>暂无版本历史</div>';
+        return;
+      }
+
+      let html = `<p style="font-size:13px;color:#666;margin-bottom:12px;">当前版本: v${current_version} · 共 ${versions.length} 个版本</p>`;
+      html += '<div class="table-responsive"><table class="data-table"><thead><tr><th>版本</th><th>大小</th><th>操作人</th><th>备注</th><th>时间</th><th>操作</th></tr></thead><tbody>';
+
+      versions.forEach(v => {
+        const isCurrent = v.version === current_version;
+        html += `<tr ${isCurrent ? 'style="background:#f6ffed;"' : ''}>
+          <td><strong>v${v.version}</strong>${isCurrent ? ' <span class="tag tag-active">当前</span>' : ''}</td>
+          <td>${formatSize(v.size)}</td>
+          <td>${escapeHtml(v.uploader_name || '-')}</td>
+          <td style="font-size:12px;color:#666;">${escapeHtml(v.change_note || '-')}</td>
+          <td style="font-size:12px;">${formatDate(v.created_at)}</td>
+          <td>${!isCurrent ? `<button class="btn btn-sm btn-outline" onclick="rollbackVersion(${fileId}, ${v.version})"><i class="fas fa-undo me-1"></i>恢复</button>` : ''}</td>
+        </tr>`;
+      });
+
+      html += '</tbody></table></div>';
+      document.getElementById('versionBody').innerHTML = html;
+    }
+
+    async function rollbackVersion(fileId, version) {
+      if (!confirm(`确定要回滚到 v${version} 吗？当前内容将保存为新版本。`)) return;
+      const result = await API.rollbackVersion(fileId, version);
+      if (result.code === 200) {
+        alert('回滚成功');
+        showVersionHistory(fileId);
+      } else {
+        alert(result.message || '回滚失败');
+      }
+    }
+
+    // Add folder share button to folder actions
+    function showFolderShareModal(folderId, folderName) {
+      document.getElementById('shareResult').style.display = 'none';
+      document.getElementById('sharePassword').value = '';
+      document.getElementById('sharePermission').value = 'download';
+      document.getElementById('shareExpire').value = '';
+      document.getElementById('shareBtn').textContent = '生成分享';
+      document.getElementById('shareBtn').disabled = false;
+      shareTarget = null; // override file target
+      window._folderShareId = folderId;
+      document.getElementById('shareModal').classList.add('show');
+    }
+
+    const origDoShare = doShare;
+    doShare = async function() {
+      if (window._folderShareId) {
+        // Folder share
+        document.getElementById('shareBtn').disabled = true;
+        document.getElementById('shareBtn').textContent = '生成中...';
+        const result = await API.shareFolder(window._folderShareId, {
+          password: document.getElementById('sharePassword').value || undefined,
+          expire_hours: document.getElementById('shareExpire').value ? parseInt(document.getElementById('shareExpire').value) : undefined,
+          permission: document.getElementById('sharePermission').value
+        });
+        if (result.code === 200) {
+          document.getElementById('shareResult').style.display = 'block';
+          document.getElementById('shareUrl').value = window.location.origin + '/s/' + result.data.code;
+          document.getElementById('shareBtn').textContent = '已完成';
+        } else {
+          alert(result.message || '分享失败');
+          document.getElementById('shareBtn').disabled = false;
+          document.getElementById('shareBtn').textContent = '生成分享';
+        }
+        return;
+      }
+      await origDoShare();
+    };
+
+    // Before showing share modal, clear folder share target
+    const origShowShareModal = showShareModal;
+    showShareModal = function(id) {
+      window._folderShareId = null;
+      origShowShareModal(id);
+    };
 
     // ==================== Storage Stats ====================
     function showStorageModal() {

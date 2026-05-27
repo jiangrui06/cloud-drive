@@ -230,6 +230,7 @@
               </button>
               <button class="btn-icon" title="删除" onclick="deleteGroup(${g.id})" style="color:var(--danger);"><i class="fas fa-trash"></i></button>` : ''}
               ${!g.my_role ? `<button class="btn-icon" title="加入" onclick="joinGroup(${g.id})"><i class="fas fa-sign-in-alt"></i></button>` : ''}
+              ${g.my_role && g.my_role !== 'owner' ? `<button class="btn-icon" title="退出群组" onclick="leaveGroup(${g.id})" style="color:var(--danger);"><i class="fas fa-sign-out-alt"></i></button>` : ''}
             </div>
           </td>
         </tr>
@@ -326,10 +327,22 @@
     async function joinGroup(id) {
       const result = await API.joinGroup(id);
       if (result.code === 200) {
-        alert('已成功加入群组');
+        Toast.success('已成功加入群组');
         loadGroups();
       } else {
-        alert(result.message || '加入失败');
+        Toast.error(result.message || '加入失败');
+      }
+    }
+
+    // ==================== Leave Group ====================
+    async function leaveGroup(id) {
+      if (!confirm('确定要退出此群组吗？')) return;
+      const result = await API.leaveGroup(id);
+      if (result.code === 200) {
+        Toast.success('已退出群组');
+        loadGroups();
+      } else {
+        Toast.error(result.message || '操作失败');
       }
     }
 

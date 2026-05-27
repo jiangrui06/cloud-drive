@@ -217,6 +217,19 @@
     </div>
   </div>
 
+  <!-- Operation Logs Modal -->
+  <div class="modal-overlay" id="logModal">
+    <div class="modal" style="max-width:700px;">
+      <div class="modal-header">
+        <h4><i class="fas fa-history me-2"></i>操作日志</h4>
+        <button class="btn btn-sm btn-outline" onclick="closeModal('logModal')">&times;</button>
+      </div>
+      <div class="modal-body" id="logBody">
+        <div class="text-center py-4 text-muted">加载中...</div>
+      </div>
+    </div>
+  </div>
+
   <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">
     <i class="fas fa-bars"></i>
   </button>
@@ -267,6 +280,9 @@
           <td>${formatDate(u.last_login)}</td>
           <td>
             <div class="file-actions">
+              <button class="btn-icon" title="操作日志" onclick="showUserLogs(${u.id})">
+                <i class="fas fa-history"></i>
+              </button>
               <button class="btn-icon" title="编辑" onclick="editUser(${u.id}, '${u.nickname || ''}', '${u.email || ''}', '${u.phone || ''}')">
                 <i class="fas fa-edit"></i>
               </button>
@@ -283,6 +299,10 @@
               <button class="btn-icon" title="设为普通用户" onclick="setRole(${u.id}, 'user')">
                 <i class="fas fa-user"></i>
               </button>`}
+              ${u.role !== 'admin' ? `
+              <button class="btn-icon" title="删除" onclick="deleteUser(${u.id})" style="color:var(--danger);">
+                <i class="fas fa-trash-alt"></i>
+              </button>` : ''}
             </div>
           </td>
         </tr>
@@ -378,6 +398,58 @@
       const result = await API.adminUpdateUser(id, { role });
       if (result.code === 200) loadUsers();
       else alert(result.message || '操作失败');
+    }
+
+    // ==================== Delete User ====================
+    async function deleteUser(id) {
+      if (!confirm('确定要删除此用户吗？此操作不可恢复！')) return;
+      const result = await API.deleteUser(id);
+      if (result.code === 200) {
+        Toast.success('用户已删除');
+        loadUsers();
+      } else {
+        Toast.error(result.message || '删除失败');
+      }
+    }
+
+    // ==================== Operation Logs ====================
+    async function showUserLogs(userId) {
+      document.getElementById('logBody').innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>加载中...</div>';
+      document.getElementById('logModal').classList.add('show');
+
+      const result = await API.getLogs({ user_id: userId, pageSize: 50 });
+      if (result.code !== 200) {
+        document.getElementById('logBody').innerHTML = '<div class="text-center py-4 text-danger">加载失败</div>';
+        return;
+      }
+
+      const logs = result.data.list || [];
+      if (logs.length === 0) {
+        document.getElementById('logBody').innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-inbox me-2"></i>暂无操作日志</div>';
+        return;
+      }
+
+      let html = `<p style="font-size:13px;color:#666;margin-bottom:12px;">共 ${result.data.total || logs.length} 条记录</p>`;
+      html += '<div class="table-responsive" style="max-height:400px;overflow-y:auto;"><table class="data-table"><thead><tr><th>时间</th><th>用户</th><th>操作</th><th>目标</th><th>IP</th></tr></thead><tbody>';
+
+      logs.forEach(log => {
+        const actionMap = {
+          'login': '登录', 'register': '注册', 'logout': '退出',
+          'upload': '上传', 'delete': '删除', 'download': '下载', 'rename': '重命名', 'move': '移动', 'copy': '复制', 'edit': '编辑',
+          'share': '分享', 'cancel_share': '取消分享', 'share_folder': '分享文件夹',
+          'delete_folder': '删除文件夹', 'batch_delete': '批量删除', 'rollback': '回滚'
+        };
+        html += `<tr>
+          <td style="font-size:12px;white-space:nowrap;">${formatDate(log.created_at)}</td>
+          <td>${escapeHtml(log.username || '-')}</td>
+          <td><span class="tag tag-active" style="font-size:11px;">${actionMap[log.action] || log.action}</span></td>
+          <td style="font-size:12px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(log.target_name || log.target_type || '-')}</td>
+          <td style="font-size:12px;color:#999;">${log.ip_address || '-'}</td>
+        </tr>`;
+      });
+
+      html += '</tbody></table></div>';
+      document.getElementById('logBody').innerHTML = html;
     }
 
     // ==================== Storage Stats ====================

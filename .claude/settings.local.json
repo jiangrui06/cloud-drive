@@ -21,7 +21,30 @@
       "Bash(pm2 startup *)",
       "Bash(pm2 save *)",
       "Bash(pm2 list *)",
-      "Bash(pm2 show *)"
+      "Bash(pm2 show *)",
+      "Bash(ipconfig)",
+      "Bash(netsh advfirewall *)",
+      "Bash(npm run *)",
+      "Bash(pm2 restart *)",
+      "Bash(pm2 env *)",
+      "Bash(where mkcert *)",
+      "Bash(choco install *)",
+      "Bash(winget install *)",
+      "Bash(chmod +x /tmp/mkcert*.exe)",
+      "Bash(/tmp/mkcert-v1.4.4-windows-amd64.exe *)",
+      "Bash(cp /tmp/mkcert-v1.4.4-windows-amd64.exe /tmp/mkcert.exe)",
+      "Read(//tmp/**)",
+      "Bash(/tmp/mkcert.exe *)",
+      "Bash(cp /tmp/mkcert.exe /c/Users/Administrator/Desktop/cloud-drive/mkcert.exe)",
+      "Bash(cmd.exe /c \"mkcert.exe -install\")",
+      "Bash(powershell *)",
+      "Bash(cmd *)",
+      "Bash(openssl version *)",
+      "Bash(pm2 logs *)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('OK' if d.get\\('code'\\)==200 else 'FAIL: '+d.get\\('message',''\\)\\)\")",
+      "Bash(python3 -c ' *)",
+      "Bash(echo \"hello\")",
+      "Bash(curl -s -X POST http://192.168.101.26:3000/api/files/upload -H 'Authorization: Bearer __TRACKED_VAR__' -F 'file=@/tmp/wechat_test.png;filename=微信图片_20251203195121_274_19.png' -F folder_id=)"
     ]
   }
 }

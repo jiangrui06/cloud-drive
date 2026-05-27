@@ -49,5 +49,13 @@ module.exports = {
   captcha: {
     enabled: false,      // 生产环境启用
     expireIn: 300        // 5分钟有效
+  },
+
+  // SSL/HTTPS 配置
+  ssl: {
+    enabled: true,
+    cert: '192.168.101.26+3.pem',
+    key: '192.168.101.26+3-key.pem',
+    port: 3443
   }
 };

@@ -38,7 +38,10 @@
           <button type="submit" class="btn btn-primary btn-block btn-lg" id="loginBtn">
             <i class="fas fa-sign-in-alt me-1"></i>登录
           </button>
-          <div class="text-center mt-3">
+          <div class="text-center mt-2">
+            <a href="#" onclick="showForgotPassword(event)" style="font-size:13px;">忘记密码？</a>
+          </div>
+          <div class="text-center mt-2">
             <small class="text-muted">默认管理员: admin / admin123456</small>
           </div>
         </form>
@@ -87,6 +90,22 @@
             <i class="fas fa-user-plus me-1"></i>注册
           </button>
         </form>
+
+        <!-- 忘记密码 -->
+        <form id="forgotForm" class="login-form" style="display:none;">
+          <div class="form-group">
+            <label><i class="fas fa-envelope me-1"></i>注册邮箱</label>
+            <input type="email" class="form-control" id="forgotEmail" placeholder="请输入注册时使用的邮箱" required>
+          </div>
+          <p style="font-size:13px;color:#666;text-align:center;">重置链接将发送至您的邮箱，请在服务器控制台查看</p>
+          <div id="forgotResult" style="display:none;" class="alert alert-success"></div>
+          <button type="submit" class="btn btn-primary btn-block btn-lg" id="forgotBtn">
+            <i class="fas fa-paper-plane me-1"></i>发送重置链接
+          </button>
+          <div class="text-center mt-3">
+            <a href="#" onclick="showLoginTab(event)" style="font-size:13px;"><i class="fas fa-arrow-left me-1"></i>返回登录</a>
+          </div>
+        </form>
       </div>
       <p class="text-center mt-3 text-white opacity-75" style="font-size:13px;">
         企业网盘管理系统 v1.0.0
@@ -107,6 +126,19 @@
       });
     });
 
+    function showForgotPassword(e) {
+      e.preventDefault();
+      document.querySelectorAll('.login-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.login-form').forEach(f => f.style.display = 'none');
+      document.getElementById('forgotForm').style.display = 'block';
+      document.getElementById('forgotResult').style.display = 'none';
+    }
+
+    function showLoginTab(e) {
+      e.preventDefault();
+      document.querySelector('[data-tab="password"]').click();
+    }
+
     // 密码登录
     document.getElementById('passwordForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -119,9 +151,10 @@
       btn.disabled = false; btn.innerHTML = '<i class="fas fa-sign-in-alt me-1"></i>登录';
       if (result.code === 200) {
         Auth.setLogin(result.data);
-        window.location.href = '/dashboard.html';
+        Toast.success('登录成功');
+        setTimeout(() => { window.location.href = '/dashboard.html'; }, 300);
       } else {
-        alert(result.message || '登录失败');
+        Toast.error(result.message || '登录失败');
       }
     });
 
@@ -134,9 +167,10 @@
       });
       if (result.code === 200) {
         Auth.setLogin(result.data);
-        window.location.href = '/dashboard.html';
+        Toast.success('登录成功');
+        setTimeout(() => { window.location.href = '/dashboard.html'; }, 300);
       } else {
-        alert(result.message || '登录失败');
+        Toast.error(result.message || '登录失败');
       }
     });
 
@@ -145,7 +179,7 @@
     document.getElementById('sendCodeBtn').addEventListener('click', async function () {
       if (countdown > 0) return;
       const email = document.getElementById('emailAccount').value;
-      if (!email) return alert('请先输入邮箱');
+      if (!email) return Toast.warning('请先输入邮箱');
       const result = await API.post('/auth/send-code', { email });
       if (result.code === 200) {
         countdown = 60;
@@ -160,7 +194,7 @@
             this.disabled = false;
           }
         }, 1000);
-        alert('验证码已发送（请在服务器控制台查看验证码）');
+        Toast.success('验证码已发送（请在服务器控制台查看）');
       }
     });
 
@@ -169,7 +203,7 @@
       e.preventDefault();
       const password = document.getElementById('regPassword').value;
       const confirm = document.getElementById('regConfirm').value;
-      if (password !== confirm) return alert('两次密码输入不一致');
+      if (password !== confirm) return Toast.warning('两次密码输入不一致');
       const result = await API.register({
         username: document.getElementById('regUsername').value,
         password,
@@ -178,11 +212,33 @@
       });
       if (result.code === 201) {
         Auth.setLogin(result.data);
-        window.location.href = '/dashboard.html';
+        Toast.success('注册成功');
+        setTimeout(() => { window.location.href = '/dashboard.html'; }, 300);
       } else {
-        alert(result.message || '注册失败');
+        Toast.error(result.message || '注册失败');
       }
     });
+
+    // 忘记密码
+    document.getElementById('forgotForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('forgotEmail').value;
+      if (!email) return Toast.warning('请输入邮箱地址');
+      const btn = document.getElementById('forgotBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>发送中...';
+      const result = await API.post('/auth/forgot-password', { email });
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>发送重置链接';
+      document.getElementById('forgotResult').textContent = result.message || '请求已发送';
+      document.getElementById('forgotResult').style.display = 'block';
+    });
+
+    // 检测 URL hash，自动切换到对应标签
+    if (window.location.hash === '#register') {
+      const regTab = document.querySelector('[data-tab="register"]');
+      if (regTab) regTab.click();
+    }
 
     // 检测已登录
     if (localStorage.getItem('token')) {
