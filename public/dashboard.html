@@ -26,7 +26,7 @@
         <div class="menu-item" id="menuUsers" onclick="location.href='/admin/users.html'" style="display:none;">
           <i class="fas fa-user-cog"></i>用户管理<span class="badge">Admin</span>
         </div>
-        <div class="menu-item" onclick="showStorageModal()"><i class="fas fa-database"></i>存储统计</div>
+        <div class="menu-item" onclick="location.href='/storage-stats.html'"><i class="fas fa-database"></i>存储统计</div>
       </nav>
       <div class="sidebar-footer">
         <div class="user-info" onclick="showUserMenu()">
@@ -134,20 +134,6 @@
     </main>
   </div>
 
-  <!-- Storage Modal -->
-  <div class="modal-overlay" id="storageModal">
-    <div class="modal">
-      <div class="modal-header">
-        <h4><i class="fas fa-chart-bar me-2"></i>存储统计</h4>
-        <button class="btn btn-sm btn-outline" onclick="closeModal('storageModal')">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div id="storageChart"></div>
-        <div class="mt-3" id="typeStats"></div>
-      </div>
-    </div>
-  </div>
-
   <!-- Mobile sidebar toggle -->
   <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">
     <i class="fas fa-bars"></i>
@@ -176,9 +162,23 @@
         const d = stats.data;
         document.getElementById('statStorage').textContent = formatSize(d.total_storage);
         document.getElementById('statFiles').textContent = d.total_files;
-        document.getElementById('statFolders').textContent = '-';
-        document.getElementById('statGroups').textContent = '-';
+      }
 
+      // Folder count
+      const foldersRes = await API.getFolders();
+      if (foldersRes.code === 200) {
+        document.getElementById('statFolders').textContent = foldersRes.data.list.length;
+      }
+
+      // Group count
+      const groupsRes = await API.getGroups({ page: 1, pageSize: 1 });
+      if (groupsRes.code === 200) {
+        document.getElementById('statGroups').textContent = groupsRes.data.pagination?.total || groupsRes.data.list.length;
+      }
+
+      // Storage bar
+      if (stats.code === 200) {
+        const d = stats.data;
         const used = formatSize(d.used_storage);
         const total = formatSize(d.total_storage);
         document.getElementById('storageText').textContent = `${used} / ${total}`;
@@ -225,42 +225,11 @@
 
     loadDashboard();
 
-    function showStorageModal() {
-      document.getElementById('storageModal').classList.add('show');
-      API.getStorageStats().then(r => {
-        if (r.code === 200) {
-          const d = r.data;
-          let html = '<h6 class="mb-3">文件类型分布</h6>';
-          if (d.type_stats && d.type_stats.length > 0) {
-            html += '<div class="table-responsive"><table class="data-table"><thead><tr><th>类型</th><th>数量</th><th>大小</th></tr></thead><tbody>';
-            d.type_stats.forEach(t => {
-              html += `<tr><td>.${t.extension || '未知'}</td><td>${t.count}</td><td>${formatSize(t.total_size)}</td></tr>`;
-            });
-            html += '</tbody></table></div>';
-          } else {
-            html += '<p class="text-muted text-center py-3">暂无数据</p>';
-          }
-          document.getElementById('typeStats').innerHTML = html;
-        }
-      });
-    }
-
-    function closeModal(id) {
-      document.getElementById(id).classList.remove('show');
-    }
-
     function showUserMenu() {
       if (confirm('确定要退出登录吗？')) {
         Auth.logout();
       }
     }
-
-    // Close modal on overlay click
-    document.querySelectorAll('.modal-overlay').forEach(el => {
-      el.addEventListener('click', (e) => {
-        if (e.target === el) el.classList.remove('show');
-      });
-    });
   </script>
 </body>
 </html>

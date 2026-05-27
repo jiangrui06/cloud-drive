@@ -21,7 +21,7 @@
         <div class="menu-item active" onclick="location.href='/admin/groups.html'"><i class="fas fa-users"></i>我的群组</div>
         <div class="menu-divider" style="border-top:1px solid rgba(255,255,255,.1); margin:8px 16px;"></div>
         <div class="menu-divider" style="border-top:1px solid rgba(255,255,255,.1); margin:8px 16px;"></div>
-        <div class="menu-item" onclick="showStorageModal()"><i class="fas fa-database"></i>存储统计</div>
+        <div class="menu-item" onclick="location.href='/storage-stats.html'"><i class="fas fa-database"></i>存储统计</div>
         <div class="menu-item" id="menuUsers3" onclick="location.href='/admin/users.html'" style="display:none;">
           <i class="fas fa-user-cog"></i>用户管理
         </div>
@@ -127,35 +127,6 @@
       </div>
       <div class="modal-body" id="groupDetailBody">
         <div class="text-center py-4 text-muted">加载中...</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Storage Stats Modal -->
-  <div class="modal-overlay" id="storageModal">
-    <div class="modal" style="max-width:640px;">
-      <div class="modal-header">
-        <h4><i class="fas fa-chart-bar me-2"></i>存储统计</h4>
-        <button class="btn btn-sm btn-outline" onclick="closeModal('storageModal')">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="mb-4">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <span class="fw-bold"><i class="fas fa-user me-2"></i>个人存储</span>
-            <span id="myStorageText" style="font-size:13px;color:#666;">-</span>
-          </div>
-          <div class="progress" style="height:8px;">
-            <div class="progress-bar" id="myStorageBar" style="width:0%;"></div>
-          </div>
-        </div>
-        <div id="groupStorageSection" style="display:none;">
-          <h6 class="mb-3"><i class="fas fa-users me-2"></i>群组存储分布</h6>
-          <div id="groupStorageContent" class="table-responsive"></div>
-        </div>
-        <div class="mt-3">
-          <h6 class="mb-3"><i class="fas fa-chart-pie me-2"></i>个人文件类型分布</h6>
-          <div id="typeStats"></div>
-        </div>
       </div>
     </div>
   </div>
@@ -451,69 +422,6 @@
     async function changeRole(groupId, userId, role) {
       const result = await API.manageGroupMember(groupId, { userId, action: 'setRole', role });
       if (result.code !== 200) alert(result.message || '修改失败');
-    }
-
-    // ==================== Storage Stats ====================
-    async function showStorageModal() {
-      document.getElementById('storageModal').classList.add('show');
-      document.getElementById('typeStats').innerHTML = '<p class="text-muted">加载中...</p>';
-
-      // 个人存储统计
-      const stats = await API.getStorageStats();
-      if (stats.code === 200) {
-        const d = stats.data;
-        const used = formatSize(d.used_storage);
-        const total = formatSize(d.total_storage);
-        document.getElementById('myStorageText').textContent = `${used} / ${total}`;
-        document.getElementById('myStorageBar').style.width = Math.min(d.used_percent, 100) + '%';
-
-        let html = '';
-        if (d.type_stats && d.type_stats.length > 0) {
-          html += '<div class="table-responsive"><table class="data-table"><thead><tr><th>类型</th><th>数量</th><th>大小</th></tr></thead><tbody>';
-          d.type_stats.forEach(t => {
-            html += `<tr><td>.${t.extension || '未知'}</td><td>${t.count}</td><td>${formatSize(t.total_size)}</td></tr>`;
-          });
-          html += '</tbody></table></div>';
-        } else {
-          html += '<p class="text-muted text-center py-3">暂无数据</p>';
-        }
-        document.getElementById('typeStats').innerHTML = html;
-      }
-
-      // 群组存储统计 - 遍历所有群组
-      const groupsResult = await API.getGroups({ page: 1, pageSize: 100 });
-      if (groupsResult.code === 200 && groupsResult.data.list.length > 0) {
-        const groups = groupsResult.data.list;
-        let allHtml = '';
-        for (const g of groups) {
-          const gStats = await API.getGroupStorageStats(g.id);
-          if (gStats.code === 200) {
-            const gd = gStats.data;
-            const usedSize = formatSize(gd.used_storage);
-            allHtml += `
-              <div class="card mb-3" style="border:1px solid #e8e8e8;border-radius:8px;">
-                <div class="card-body" style="padding:12px 16px;">
-                  <div class="d-flex justify-content-between align-items-center mb-2">
-                    <strong><i class="fas fa-folder-open me-1"></i>${g.name}</strong>
-                    <span style="font-size:13px;color:#666;">${gd.total_files} 个文件 · ${usedSize}</span>
-                  </div>`;
-            if (gd.folder_stats && gd.folder_stats.length > 0) {
-              allHtml += `<div style="margin-left:16px;font-size:13px;">`;
-              gd.folder_stats.forEach(fs => {
-                const pct = gd.used_storage > 0 ? ((fs.total_size / gd.used_storage) * 100).toFixed(1) : 0;
-                allHtml += `<div class="d-flex justify-content-between align-items-center py-1">
-                  <span>📁 ${fs.name}</span>
-                  <span>${fs.file_count} 文件 · ${formatSize(fs.total_size)} <span style="color:#999;">(${pct}%)</span></span>
-                </div>`;
-              });
-              allHtml += `</div>`;
-            }
-            allHtml += `</div></div>`;
-          }
-        }
-        document.getElementById('groupStorageContent').innerHTML = allHtml;
-        document.getElementById('groupStorageSection').style.display = 'block';
-      }
     }
 
     function formatSize(bytes) {

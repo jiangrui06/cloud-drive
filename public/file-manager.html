@@ -27,7 +27,7 @@
         <div class="menu-item" id="menuUsers2" onclick="location.href='/admin/users.html'" style="display:none;">
           <i class="fas fa-user-cog"></i>用户管理<span class="badge">Admin</span>
         </div>
-        <div class="menu-item" onclick="showStorageModal()"><i class="fas fa-database"></i>存储统计</div>
+        <div class="menu-item" onclick="location.href='/storage-stats.html'"><i class="fas fa-database"></i>存储统计</div>
       </nav>
       <div class="sidebar-footer">
         <div class="user-info" onclick="showUserMenu()">
@@ -244,20 +244,6 @@
       </div>
       <div class="modal-body" id="analysisBody">
         <div class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>分析中...</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Storage Modal -->
-  <div class="modal-overlay" id="storageModal">
-    <div class="modal">
-      <div class="modal-header">
-        <h4><i class="fas fa-chart-bar me-2"></i>存储统计</h4>
-        <button class="btn btn-sm btn-outline" onclick="closeModal('storageModal')">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div id="storageChart"></div>
-        <div class="mt-3" id="typeStats"></div>
       </div>
     </div>
   </div>
@@ -1384,27 +1370,6 @@
       window._folderShareId = null;
       origShowShareModal(id);
     };
-
-    // ==================== Storage Stats ====================
-    function showStorageModal() {
-      document.getElementById('storageModal').classList.add('show');
-      API.getStorageStats().then(r => {
-        if (r.code === 200) {
-          const d = r.data;
-          let html = '<h6 class="mb-3">文件类型分布</h6>';
-          if (d.type_stats && d.type_stats.length > 0) {
-            html += '<div class="table-responsive"><table class="data-table"><thead><tr><th>类型</th><th>数量</th><th>大小</th></tr></thead><tbody>';
-            d.type_stats.forEach(t => {
-              html += `<tr><td>.${t.extension || '未知'}</td><td>${t.count}</td><td>${formatSize(t.total_size)}</td></tr>`;
-            });
-            html += '</tbody></table></div>';
-          } else {
-            html += '<p class="text-muted text-center py-3">暂无数据</p>';
-          }
-          document.getElementById('typeStats').innerHTML = html;
-        }
-      });
-    }
 
     // ==================== Utilities ====================
     function closeModal(id) {
